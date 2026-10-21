@@ -11,11 +11,9 @@
 //! to a file's size that do not touch its directory (e.g. a growing log
 //! file) are only picked up by a full scan.
 
-use std::collections::HashSet;
 use std::fs::{self, Metadata};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
 use rayon::prelude::*;
@@ -60,7 +58,10 @@ struct Ctx<'a> {
     opts: &'a ScanOptions,
     progress: &'a ScanProgress,
     root_dev: u64,
-    seen_inodes: Mutex<HashSet<(u64, u64)>>,
+    /// Hard-linked files already counted. Windows has no cheap inode, so
+    /// hard links are counted per link there.
+    #[cfg(unix)]
+    seen_inodes: std::sync::Mutex<std::collections::HashSet<(u64, u64)>>,
     previous: Option<&'a Tree>,
 }
 
@@ -96,7 +97,8 @@ pub fn scan_with_cache(
         opts,
         progress,
         root_dev: device(&meta),
-        seen_inodes: Mutex::new(HashSet::new()),
+        #[cfg(unix)]
+        seen_inodes: Default::default(),
         previous: previous.filter(|p| p.root_path == root && p.root().is_some()),
     };
     let cached = ctx.previous.map(|_| Tree::ROOT);
