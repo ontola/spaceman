@@ -217,14 +217,22 @@ fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
             out.stamp = 0;
             break;
         }
-        // symlink_metadata: never follow links.
-        let Ok(meta) = entry.path().symlink_metadata() else {
+        // Never follows links. On Windows this comes straight from the
+        // directory listing, so files don't have to be opened one by one.
+        let Ok(meta) = entry.metadata() else {
             ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
             continue;
         };
         let name: Box<str> = entry.file_name().to_string_lossy().into();
         let ft = meta.file_type();
         if ft.is_dir() {
+            // NTFS updates a folder's timestamps in its parent's listing
+            // lazily, and rescans trust them. Ask the folder itself.
+            #[cfg(windows)]
+            let Ok(meta) = entry.path().symlink_metadata() else {
+                ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
+                continue;
+            };
             if ctx.opts.same_filesystem && device(&meta) != ctx.root_dev {
                 continue;
             }
@@ -380,7 +388,22 @@ fn disk_size(meta: &Metadata) -> u64 {
     meta.blocks() * 512
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn disk_size(meta: &Metadata) -> u64 {
+    use std::os::windows::fs::MetadataExt;
+    const OFFLINE: u32 = 0x1000;
+    const RECALL_ON_OPEN: u32 = 0x4_0000;
+    const RECALL_ON_DATA_ACCESS: u32 = 0x40_0000;
+    // Cloud files (OneDrive, Dropbox, ...) that are not downloaded take
+    // no space on this disk.
+    if meta.file_attributes() & (OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS) != 0 {
+        return 0;
+    }
+    // Whole 4 KiB clusters, like "Size on disk" in Explorer.
+    meta.len().next_multiple_of(4096)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn disk_size(meta: &Metadata) -> u64 {
     meta.len()
 }
@@ -391,6 +414,8 @@ fn device(meta: &Metadata) -> u64 {
     meta.dev()
 }
 
+/// Windows mounts other volumes on folders as reparse points, which the
+/// scan skips like links, so everything it enters is on one volume.
 #[cfg(not(unix))]
 fn device(_meta: &Metadata) -> u64 {
     0

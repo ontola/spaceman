@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
 import '../widgets/selection_bar.dart';
 
@@ -230,7 +231,7 @@ class _ItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final note = switch (s.removal) {
-      RemovalMode.emptyTrash => 'Empties the Trash permanently.',
+      RemovalMode.emptyTrash => 'Empties the $trashName permanently.',
       RemovalMode.contents => 'The folder stays, its contents are removed.',
       RemovalMode.whole => null,
     };

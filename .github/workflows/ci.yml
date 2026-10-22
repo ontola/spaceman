@@ -39,8 +39,6 @@ jobs:
 
   macos:
     runs-on: macos-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -57,13 +55,49 @@ jobs:
         with:
           name: SpaceMan-macOS
           path: SpaceMan-macOS.zip
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter build windows --release
+      # The .exe needs the DLLs and data folder next to it.
+      - name: Zip app
+        shell: pwsh
+        run: |
+          Rename-Item build/windows/x64/runner/Release SpaceMan
+          Compress-Archive -Path build/windows/x64/runner/SpaceMan -DestinationPath SpaceMan-Windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpaceMan-Windows
+          path: SpaceMan-Windows.zip
+
+  publish:
+    needs: [macos, windows]
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      # Pushes and pull requests into main share the "dev" release; a pull
+      # request stacked on another branch gets its own, so they don't
+      # overwrite each other's builds.
       - name: Publish development build
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TAG: ${{ (github.event_name == 'push' || github.base_ref == 'main') && 'dev' || format('dev-pr-{0}', github.event.number) }}
         run: |
-          gh release delete dev --yes --cleanup-tag || true
-          gh release create dev SpaceMan-macOS.zip --prerelease --target "$SHA" \
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" SpaceMan-macOS.zip SpaceMan-Windows.zip --prerelease --target "$SHA" \
             --title "Development build" \
-            --notes "Latest macOS build ($SHA). Unsigned: the first time, right-click SpaceMan.app and choose Open."
+            --notes "Latest builds ($SHA). Unsigned. macOS: the first time, right-click SpaceMan.app and choose Open. Windows: unzip, run SpaceMan.exe, and if SmartScreen warns, choose More info, Run anyway."

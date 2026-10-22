@@ -102,7 +102,21 @@ const HOME_RULES: &[HomeRule] = &[
 const HOME_RULES: &[HomeRule] = &[
     HomeRule { rel: "AppData/Local/Temp", removal: Contents, title: "Temporary files", reason: "Temporary files left behind by apps and installers.", category: Cache, safety: Safe },
     HomeRule { rel: "AppData/Local/Microsoft/Windows/INetCache", removal: Contents, title: "Internet cache", reason: "Cached web content, downloaded again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/Microsoft/Windows/WER", removal: Contents, title: "Error reports", reason: "Crash and error reports Windows keeps after sending them.", category: Logs, safety: Safe },
     HomeRule { rel: "AppData/Local/CrashDumps", removal: Contents, title: "Crash dumps", reason: "Memory dumps from crashed apps.", category: Logs, safety: Safe },
+    HomeRule { rel: "AppData/Local/D3DSCache", removal: Contents, title: "DirectX shader cache", reason: "Compiled graphics shaders, rebuilt by games and apps when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/NVIDIA/DXCache", removal: Contents, title: "NVIDIA shader cache", reason: "Compiled graphics shaders, rebuilt when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/NVIDIA/GLCache", removal: Contents, title: "NVIDIA OpenGL cache", reason: "Compiled graphics shaders, rebuilt when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/Google/Chrome/User Data/Default/Cache", removal: Contents, title: "Chrome cache", reason: "Cached web content, downloaded again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/Microsoft/Edge/User Data/Default/Cache", removal: Contents, title: "Edge cache", reason: "Cached web content, downloaded again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/npm-cache/_cacache", removal: Whole, title: "npm cache", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/pip/cache", removal: Whole, title: "pip cache", reason: "Downloaded Python packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/Yarn/Cache", removal: Whole, title: "Yarn cache", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/pnpm/store", removal: Whole, title: "pnpm store", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Local/go-build", removal: Whole, title: "Go build cache", reason: "Compiled Go packages. Prefer `go clean -cache`.", category: BuildOutput, safety: Safe },
+    HomeRule { rel: "AppData/Local/Pub/Cache", removal: Whole, title: "Dart pub cache", reason: "Downloaded Dart and Flutter packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "AppData/Roaming/Apple Computer/MobileSync/Backup", removal: Whole, title: "iPhone and iPad backups", reason: "Local device backups made by iTunes. Remove old ones if you back up to iCloud.", category: Backups, safety: Review },
+    HomeRule { rel: "Apple/MobileSync/Backup", removal: Whole, title: "iPhone and iPad backups", reason: "Local device backups made by Apple Devices. Remove old ones if you back up to iCloud.", category: Backups, safety: Review },
     HomeRule { rel: "AppData/Local/Docker", removal: Whole, title: "Docker data", reason: "Docker images and volumes. Prefer `docker system prune` to clean up.", category: Cache, safety: Review },
 ];
 
@@ -261,6 +275,15 @@ mod tests {
         assert_eq!(removal_for(&home.join("Downloads/x.zip"), Some(home)), Whole);
         assert_eq!(removal_for(&home.join(".npm/_cacache"), Some(home)), Whole);
         assert_eq!(removal_for(Path::new("/elsewhere/Downloads"), Some(home)), Whole);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_rules_match_backslash_paths() {
+        let home = Path::new(r"C:\Users\u");
+        assert_eq!(removal_for(Path::new(r"C:\Users\u\AppData\Local\Temp"), Some(home)), Contents);
+        assert_eq!(removal_for(Path::new(r"C:\Users\u\AppData\Local\Temp\x.tmp"), Some(home)), Whole);
+        assert_eq!(removal_for(Path::new(r"C:\Users\u\Downloads"), Some(home)), Contents);
     }
 
     #[test]
