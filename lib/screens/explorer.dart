@@ -273,7 +273,6 @@ class _ExplorerScreenState extends State<ExplorerScreen>
               offset: Offset(_width * t, 0),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: background,
                   boxShadow: [
                     if (below != null && t > 0 && t < 1)
                       BoxShadow(
@@ -283,7 +282,9 @@ class _ExplorerScreenState extends State<ExplorerScreen>
                       ),
                   ],
                 ),
-                child: _list(above),
+                // Opaque, so the folder underneath does not show through;
+                // a Material keeps the rows' ink visible.
+                child: Material(color: background, child: _list(above)),
               ),
             ),
           ],
