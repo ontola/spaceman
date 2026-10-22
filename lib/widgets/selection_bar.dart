@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_model.dart';
 import '../format.dart';
 import '../platform.dart';
+import '../src/rust/api/spaceman.dart';
 
 /// Bottom bar with everything that is ticked, and actions for all of it.
 class SelectionBar extends StatefulWidget {
@@ -157,6 +158,41 @@ class RevealButton extends StatelessWidget {
       tooltip: 'Show in $fileManagerName',
       icon: const Icon(Icons.open_in_new, size: 18),
       onPressed: () => reveal(path),
+    );
+  }
+}
+
+/// Lock in front of a row: marks the item as do not touch, or allows it
+/// again. Items inside a protected folder show the lock but can not be
+/// toggled on their own.
+class ProtectToggle extends StatelessWidget {
+  const ProtectToggle({super.key, required this.model, required this.node});
+
+  final AppModel model;
+  final NodeView node;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (node.kind == EntryKind.smallFiles) return const SizedBox(width: 40);
+    final own = model.protectedPaths.contains(node.path);
+    final inherited = !own && node.protection == ProtectionState.protected;
+    return IconButton(
+      tooltip: own
+          ? 'Do not touch (click to allow again)'
+          : inherited
+          ? 'Inside a folder marked do not touch'
+          : 'Mark as do not touch',
+      onPressed: inherited
+          ? null
+          : () => own ? model.unprotect(node.path) : model.protect(node.path),
+      icon: Icon(
+        own || inherited ? Icons.lock : Icons.lock_open_outlined,
+        size: 18,
+        color: own || inherited
+            ? theme.colorScheme.tertiary
+            : theme.colorScheme.outlineVariant,
+      ),
     );
   }
 }

@@ -81,11 +81,20 @@ class _Section extends StatelessWidget {
           child: Text(subtitle, style: theme.textTheme.bodySmall),
         ),
         for (final s in items)
-          CheckboxListTile(
-            value: model.isSelected(s.node.path),
-            onChanged: (v) => model.setSelected(s.node, v ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            secondary: Row(
+          ListTile(
+            onTap: () =>
+                model.setSelected(s.node, !model.isSelected(s.node.path)),
+            leading: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ProtectToggle(model: model, node: s.node),
+                Checkbox(
+                  value: model.isSelected(s.node.path),
+                  onChanged: (v) => model.setSelected(s.node, v ?? false),
+                ),
+              ],
+            ),
+            trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(

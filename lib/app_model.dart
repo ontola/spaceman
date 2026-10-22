@@ -250,6 +250,8 @@ class AppModel extends ChangeNotifier {
 
   void protect(String path) {
     core.protectPath(path: path);
+    // Protected items can not be removed, so they can not stay ticked.
+    selection.removeWhere((key, _) => key == path || _isInside(key, path));
     _protectionChanged();
   }
 

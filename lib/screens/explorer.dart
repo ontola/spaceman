@@ -183,7 +183,6 @@ class _NodeRow extends StatelessWidget {
       EntryKind.file => Icons.insert_drive_file_outlined,
       EntryKind.smallFiles => Icons.layers_outlined,
     };
-    final protected = node.protection == ProtectionState.protected;
     final selectable =
         node.kind != EntryKind.smallFiles &&
         node.protection == ProtectionState.none;
@@ -193,6 +192,7 @@ class _NodeRow extends StatelessWidget {
       leading: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          ProtectToggle(model: model, node: node),
           Checkbox(
             value: selectable && model.isSelected(node.path),
             onChanged: selectable
@@ -210,24 +210,7 @@ class _NodeRow extends StatelessWidget {
       title: Row(
         children: [
           Flexible(child: Text(node.name, overflow: TextOverflow.ellipsis)),
-          if (protected) ...[
-            const SizedBox(width: 6),
-            Tooltip(
-              message: model.protectedPaths.contains(node.path)
-                  ? 'Do not touch (click to allow again)'
-                  : 'Inside a folder marked do not touch',
-              child: InkWell(
-                onTap: model.protectedPaths.contains(node.path)
-                    ? () => model.unprotect(node.path)
-                    : null,
-                child: Icon(
-                  Icons.lock,
-                  size: 16,
-                  color: theme.colorScheme.tertiary,
-                ),
-              ),
-            ),
-          ] else if (node.protection == ProtectionState.containsProtected) ...[
+          if (node.protection == ProtectionState.containsProtected) ...[
             const SizedBox(width: 6),
             Tooltip(
               message: 'Contains items marked as do not touch',
