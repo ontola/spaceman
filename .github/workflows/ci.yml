@@ -39,6 +39,8 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,7 +49,21 @@ jobs:
           channel: stable
           cache: true
       - run: flutter build macos --release
+      # ditto keeps the bundle's symlinks and permissions, which a plain
+      # artifact upload of the .app folder loses.
+      - name: Zip app
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/SpaceMan.app SpaceMan-macOS.zip
       - uses: actions/upload-artifact@v4
         with:
           name: SpaceMan-macOS
-          path: build/macos/Build/Products/Release/SpaceMan.app
+          path: SpaceMan-macOS.zip
+      - name: Publish development build
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          gh release delete dev --yes --cleanup-tag || true
+          gh release create dev SpaceMan-macOS.zip --prerelease --target "$SHA" \
+            --title "Development build" \
+            --notes "Latest macOS build ($SHA). Unsigned: the first time, right-click SpaceMan.app and choose Open."
