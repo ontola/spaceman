@@ -20,32 +20,73 @@ class ExplorerScreen extends StatefulWidget {
   State<ExplorerScreen> createState() => _ExplorerScreenState();
 }
 
-class _ExplorerScreenState extends State<ExplorerScreen> {
-  /// Horizontal distance of the current trackpad gesture.
-  double _swipe = 0;
-  bool _swipeUsed = false;
+class _ExplorerScreenState extends State<ExplorerScreen>
+    with SingleTickerProviderStateMixin {
+  /// Horizontal offset of the content, following the trackpad like Finder.
+  late final AnimationController _offset = AnimationController.unbounded(
+    vsync: this,
+  );
+  double _width = 1;
+  bool _horizontal = false;
 
   AppModel get model => widget.model;
 
-  void _up() {
+  bool get _canGoUp => model.breadcrumbs(model.currentId).length > 1;
+
+  @override
+  void dispose() {
+    _offset.dispose();
+    super.dispose();
+  }
+
+  /// Slides the current folder out to the right and the parent in.
+  Future<void> _up() async {
+    if (!_canGoUp) return;
+    await _offset.animateTo(
+      _width,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeIn,
+    );
+    if (!mounted) return;
     final crumbs = model.breadcrumbs(model.currentId);
     if (crumbs.length > 1) model.open(crumbs[crumbs.length - 2].id);
+    _offset.value = -_width * 0.2;
+    await _offset.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _onPanZoomStart(PointerPanZoomStartEvent e) {
+    _offset.stop();
+    _horizontal = false;
   }
 
   void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    if (_swipeUsed) return;
-    // Only mostly-horizontal gestures; vertical ones scroll the list.
-    if (e.pan.dx.abs() < e.pan.dy.abs() * 2) return;
-    _swipe = e.pan.dx;
-    if (_swipe > 120) {
-      _swipeUsed = true;
-      _up();
+    // Decide once per gesture; vertical ones scroll the list.
+    if (!_horizontal) {
+      if (e.pan.distance < 8) return;
+      if (e.pan.dx.abs() < e.pan.dy.abs() * 1.5 || e.pan.dx < 0) return;
+      _horizontal = true;
     }
+    final dx = e.pan.dx.clamp(0.0, _width);
+    // At the top there is nowhere to go: resist like a rubber band.
+    _offset.value = _canGoUp ? dx : dx * 0.15;
   }
 
   void _onPanZoomEnd(PointerPanZoomEndEvent e) {
-    _swipe = 0;
-    _swipeUsed = false;
+    if (!_horizontal) return;
+    _horizontal = false;
+    if (_canGoUp && _offset.value > (_width * 0.25).clamp(60.0, 160.0)) {
+      _up();
+    } else {
+      _offset.animateTo(
+        0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   @override
@@ -59,12 +100,32 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       child: Focus(
         autofocus: true,
         child: Listener(
+          onPointerPanZoomStart: _onPanZoomStart,
           onPointerPanZoomUpdate: _onPanZoomUpdate,
           onPointerPanZoomEnd: _onPanZoomEnd,
           onPointerDown: (e) {
             if (e.buttons & kBackMouseButton != 0) _up();
           },
-          child: _buildContent(context),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _width = constraints.maxWidth;
+              return ClipRect(
+                child: AnimatedBuilder(
+                  animation: _offset,
+                  builder: (context, child) => Transform.translate(
+                    offset: Offset(_offset.value, 0),
+                    child: Opacity(
+                      opacity:
+                          1 -
+                          (_offset.value.abs() / _width).clamp(0.0, 1.0) * 0.7,
+                      child: child,
+                    ),
+                  ),
+                  child: _buildContent(context),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
