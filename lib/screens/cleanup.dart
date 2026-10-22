@@ -5,8 +5,8 @@ import '../format.dart';
 import '../src/rust/api/spaceman.dart';
 import '../widgets/selection_bar.dart';
 
-/// Suggestions for what can be removed. Safe ones start out ticked; the
-/// selection bar below acts on everything ticked.
+/// Suggestions for what can be removed. Nothing is ticked up front: the
+/// selection is shared with Explore, where it would go unnoticed.
 class CleanupScreen extends StatelessWidget {
   const CleanupScreen({super.key, required this.model});
 

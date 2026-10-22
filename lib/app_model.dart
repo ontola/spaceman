@@ -174,20 +174,12 @@ class AppModel extends ChangeNotifier {
     loadingSuggestions = true;
     notifyListeners();
     suggestions = await core.suggestions();
-    // Preselect safe suggestions the first time they show up, but respect
-    // the user unticking them later.
-    for (final sug in suggestions) {
-      if (sug.safe && _preselected.add(sug.node.path)) {
-        selection[sug.node.path] = sug.node;
-      }
-    }
     loadingSuggestions = false;
     notifyListeners();
   }
 
   /// Selected items by path, shared by Explore and Clean up.
   final Map<String, core.NodeView> selection = {};
-  final Set<String> _preselected = {};
 
   bool isSelected(String path) => selection.containsKey(path);
 
