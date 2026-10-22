@@ -47,6 +47,8 @@ pub struct Tree {
     pub skipped: Vec<PathBuf>,
     /// The scan was stopped early; folders it did not get to look empty.
     pub partial: bool,
+    /// Folders that could not be read (capped, see `scan::MAX_UNREADABLE`).
+    pub unreadable: Vec<PathBuf>,
     pub nodes: Vec<Node>,
 }
 

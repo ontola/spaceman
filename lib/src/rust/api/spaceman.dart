@@ -68,6 +68,10 @@ List<NodeView> breadcrumbs({required int id}) =>
 Future<List<SuggestionView>> suggestions() =>
     RustLib.instance.api.crateApiSpacemanSuggestions();
 
+/// Folders the current scan could not read, at most a couple hundred.
+List<String> unreadableFolders() =>
+    RustLib.instance.api.crateApiSpacemanUnreadableFolders();
+
 /// The scanned item at `path`, if the current scan has it.
 NodeView? nodeAt({required String path}) =>
     RustLib.instance.api.crateApiSpacemanNodeAt(path: path);

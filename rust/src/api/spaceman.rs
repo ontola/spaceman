@@ -323,6 +323,17 @@ pub fn suggestions() -> Vec<SuggestionView> {
         .collect()
 }
 
+/// Folders the current scan could not read, at most a couple hundred.
+#[flutter_rust_bridge::frb(sync)]
+pub fn unreadable_folders() -> Vec<String> {
+    let state = STATE.read().unwrap();
+    state
+        .tree
+        .as_ref()
+        .map(|t| t.unreadable.iter().map(|p| p.to_string_lossy().into_owned()).collect())
+        .unwrap_or_default()
+}
+
 /// The scanned item at `path`, if the current scan has it.
 #[flutter_rust_bridge::frb(sync)]
 pub fn node_at(path: String) -> Option<NodeView> {

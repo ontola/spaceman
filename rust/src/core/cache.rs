@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use super::tree::Tree;
 
 /// Bump whenever the serialized layout of [`Tree`] changes.
-const MAGIC: &[u8; 8] = b"SPCMAN03";
+const MAGIC: &[u8; 8] = b"SPCMAN04";
 
 /// Cache file for scans of `root` inside `cache_dir`.
 pub fn file_for(cache_dir: &Path, root: &Path) -> PathBuf {

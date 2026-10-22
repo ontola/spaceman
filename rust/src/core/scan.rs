@@ -44,8 +44,13 @@ pub struct ScanProgress {
     pub dirs: AtomicU64,
     pub bytes: AtomicU64,
     pub errors: AtomicU64,
+    /// Folders that could not be listed, up to [`MAX_UNREADABLE`].
+    pub unreadable: std::sync::Mutex<Vec<PathBuf>>,
     pub cancel: AtomicBool,
 }
+
+/// How many unreadable folders a scan remembers by path.
+pub const MAX_UNREADABLE: usize = 200;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ScanError {
@@ -126,6 +131,11 @@ pub fn scan_with_cache(
         scanned_at,
         skipped: opts.skip.clone(),
         partial: progress.cancel.load(Ordering::Relaxed),
+        unreadable: {
+            let mut u = progress.unreadable.lock().unwrap().clone();
+            u.sort();
+            u
+        },
         nodes: Vec::new(),
     };
     flatten(dir, None, &mut tree);
@@ -187,6 +197,13 @@ fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
         Ok(e) => e,
         Err(_) => {
             ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
+            let mut unreadable = ctx.progress.unreadable.lock().unwrap();
+            if unreadable.len() < MAX_UNREADABLE {
+                unreadable.push(path.to_path_buf());
+            }
+            // No stamp: never reuse this empty listing, so the next scan
+            // tries (and reports) it again.
+            out.stamp = 0;
             return Vec::new();
         }
     };

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../src/rust/api/spaceman.dart' as core;
+import 'selection_bar.dart';
 
 /// Top bar: which folder is scanned, disk usage and scan controls.
 class ScanHeader extends StatelessWidget {
@@ -36,8 +38,7 @@ class ScanHeader extends StatelessWidget {
           'Rescan to complete it.';
     } else if (p != null && p.done) {
       status =
-          'Scanned ${formatCount(p.files)} files in ${(p.elapsedMs / 1000).toStringAsFixed(1)} s'
-          '${p.errors > 0 ? ' (${formatCount(p.errors)} folders not readable)' : ''}';
+          'Scanned ${formatCount(p.files)} files in ${(p.elapsedMs / 1000).toStringAsFixed(1)} s';
     } else if (model.scannedAt != null) {
       status = 'From cache, scanned ${formatAgo(model.scannedAt!)}';
     } else {
@@ -105,6 +106,7 @@ class ScanHeader extends StatelessWidget {
                 ),
             ],
           ),
+          if (!model.scanning) _NotScanned(model: model),
           if (model.access == DiskAccess.limited)
             Align(
               alignment: Alignment.centerLeft,
@@ -128,6 +130,124 @@ class ScanHeader extends StatelessWidget {
             _DiskBar(total: disk.total, free: disk.free),
         ],
       ),
+    );
+  }
+}
+
+/// What the scan could not count: unreadable folders, and disk space in
+/// use that is not in the scanned folder at all.
+class _NotScanned extends StatelessWidget {
+  const _NotScanned({required this.model});
+
+  final AppModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    final root = model.rootNode;
+    if (root == null) return const SizedBox.shrink();
+    final unreadable = core.unreadableFolders();
+    final disk = model.diskSpace;
+    final outside = disk == null ? 0 : disk.total - disk.free - root.size;
+    // Small differences are rounding and metadata, not worth a mention.
+    final showOutside = outside > 1024 * 1024 * 1024;
+    if (unreadable.isEmpty && !showOutside) return const SizedBox.shrink();
+
+    final parts = [
+      if (showOutside) '${formatBytes(outside)} of used disk space not scanned',
+      if (unreadable.isNotEmpty)
+        '${unreadable.length >= 200 ? '200+' : unreadable.length} '
+            'folder${unreadable.length == 1 ? '' : 's'} not readable',
+    ];
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+        ),
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (context) => _NotScannedDialog(
+            root: model.root,
+            scanned: root.size,
+            outside: showOutside ? outside : 0,
+            unreadable: unreadable,
+          ),
+        ),
+        icon: const Icon(Icons.help_outline, size: 16),
+        label: Text(parts.join(' · ')),
+      ),
+    );
+  }
+}
+
+class _NotScannedDialog extends StatelessWidget {
+  const _NotScannedDialog({
+    required this.root,
+    required this.scanned,
+    required this.outside,
+    required this.unreadable,
+  });
+
+  final String root;
+  final int scanned;
+  final int outside;
+  final List<String> unreadable;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Not in this scan'),
+      content: SizedBox(
+        width: 560,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (outside > 0)
+              Text(
+                'The scan of $root found ${formatBytes(scanned)}. Another '
+                '${formatBytes(outside)} of the disk is in use outside it: '
+                'other folders, macOS itself, apps, other users, local '
+                'snapshots, and folders that could not be read. Their exact '
+                'size is unknown, because what can not be read can not be '
+                'measured.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            if (unreadable.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                unreadable.length >= 200
+                    ? 'First 200 folders that could not be read:'
+                    : 'Folders that could not be read:',
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final path in unreadable)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(path, overflow: TextOverflow.ellipsis),
+                        trailing: RevealButton(path: path),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

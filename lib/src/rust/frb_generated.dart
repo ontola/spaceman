@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1921533476;
+  int get rustContentHash => -651134938;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -126,6 +126,8 @@ abstract class RustLibApi extends BaseApi {
   Future<List<SuggestionView>> crateApiSpacemanSuggestions();
 
   void crateApiSpacemanUnprotectPath({required String path});
+
+  List<String> crateApiSpacemanUnreadableFolders();
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -594,6 +596,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSpacemanUnprotectPathConstMeta =>
       const TaskConstMeta(debugName: "unprotect_path", argNames: ["path"]);
+
+  @override
+  List<String> crateApiSpacemanUnreadableFolders() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSpacemanUnreadableFoldersConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSpacemanUnreadableFoldersConstMeta =>
+      const TaskConstMeta(debugName: "unreadable_folders", argNames: []);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
