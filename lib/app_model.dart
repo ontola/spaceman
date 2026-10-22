@@ -14,7 +14,7 @@ enum DiskAccess {
   /// The user chose to scan without the folders that need permission.
   limited,
 
-  /// No Full Disk Access and no choice made yet: explain before scanning.
+  /// The user is reading how to grant Full Disk Access.
   undecided,
 }
 
@@ -44,7 +44,6 @@ class AppModel extends ChangeNotifier {
   StreamSubscription<core.ScanUpdate>? _scanSub;
 
   File get _lastRootFile => File('$_configDir/last_root.txt');
-  File get _limitedChoiceFile => File('$_configDir/limited_access');
 
   /// Loads settings and the cached scan, then refreshes it in the background.
   Future<void> init() async {
@@ -52,11 +51,9 @@ class AppModel extends ChangeNotifier {
     final cacheDir = (await getApplicationCacheDirectory()).path;
     core.configure(configDir: _configDir, cacheDir: cacheDir);
     protectedPaths = core.protectedPaths();
-    access = core.hasFullDiskAccess()
-        ? DiskAccess.full
-        : _limitedChoiceFile.existsSync()
-        ? DiskAccess.limited
-        : DiskAccess.undecided;
+    // Without Full Disk Access, start with a scan that never makes macOS
+    // prompt; the header offers to grant access.
+    access = core.hasFullDiskAccess() ? DiskAccess.full : DiskAccess.limited;
 
     root = await _initialRoot();
     notifyListeners();
@@ -96,17 +93,11 @@ class AppModel extends ChangeNotifier {
     scan();
   }
 
-  /// Scan without the folders that make macOS ask for permission.
-  Future<void> chooseLimitedAccess() async {
-    try {
-      await _limitedChoiceFile.parent.create(recursive: true);
-      await _limitedChoiceFile.writeAsString('');
-    } on FileSystemException {
-      // We will just ask again next launch.
-    }
+  /// Back from the explanation without granting access: keep scanning
+  /// without the folders that make macOS ask for permission.
+  void chooseLimitedAccess() {
     access = DiskAccess.limited;
     notifyListeners();
-    scan();
   }
 
   /// Goes back to the explanation, e.g. to grant Full Disk Access after all.
@@ -183,8 +174,78 @@ class AppModel extends ChangeNotifier {
     loadingSuggestions = true;
     notifyListeners();
     suggestions = await core.suggestions();
+    // Preselect safe suggestions the first time they show up, but respect
+    // the user unticking them later.
+    for (final sug in suggestions) {
+      if (sug.safe && _preselected.add(sug.node.path)) {
+        selection[sug.node.path] = sug.node;
+      }
+    }
     loadingSuggestions = false;
     notifyListeners();
+  }
+
+  /// Selected items by path, shared by Explore and Clean up.
+  final Map<String, core.NodeView> selection = {};
+  final Set<String> _preselected = {};
+
+  bool isSelected(String path) => selection.containsKey(path);
+
+  void setSelected(core.NodeView node, bool on) {
+    on ? selection[node.path] = node : selection.remove(node.path);
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    selection.clear();
+    notifyListeners();
+  }
+
+  /// The selection without items inside another selected folder, so
+  /// nothing is counted or removed twice.
+  List<core.NodeView> get selectionRoots {
+    final paths = selection.keys.toList()..sort();
+    final roots = <core.NodeView>[];
+    String? last;
+    for (final p in paths) {
+      if (last != null && _isInside(p, last)) continue;
+      roots.add(selection[p]!);
+      last = p;
+    }
+    return roots;
+  }
+
+  int get selectionSize =>
+      selectionRoots.fold(0, (sum, node) => sum + node.size);
+
+  /// Whether removing the selection empties the Trash for good.
+  bool get selectionEmptiesTrash => suggestions.any(
+    (sug) =>
+        sug.removal == core.RemovalMode.emptyTrash &&
+        selection.containsKey(sug.node.path),
+  );
+
+  static bool _isInside(String path, String folder) =>
+      path.length > folder.length &&
+      path.startsWith(folder) &&
+      (path[folder.length] == '/' || path[folder.length] == r'\');
+
+  Future<core.DeleteReport> deleteSelection() async {
+    final paths = selectionRoots.map((n) => n.path).toList();
+    final report = await delete(paths);
+    for (final p in report.deleted) {
+      selection.removeWhere((key, _) => key == p || _isInside(key, p));
+    }
+    notifyListeners();
+    return report;
+  }
+
+  void protectSelection() {
+    for (final node in selectionRoots) {
+      core.protectPath(path: node.path);
+    }
+    selection.clear();
+    _protectionChanged();
   }
 
   List<core.NodeView> children(int id) => core.children(id: id);

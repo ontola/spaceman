@@ -118,7 +118,7 @@ class _AccessIntroState extends State<AccessIntro> with WidgetsBindingObserver {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: widget.model.chooseLimitedAccess,
-                child: const Text('Scan without Full Disk Access'),
+                child: const Text('Continue without Full Disk Access'),
               ),
               Text(
                 'Skips the protected folders, so macOS will not ask anything. '

@@ -7,6 +7,7 @@ import 'screens/cleanup.dart';
 import 'screens/explorer.dart';
 import 'screens/protected.dart';
 import 'widgets/scan_header.dart';
+import 'widgets/selection_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -92,6 +93,7 @@ class _HomePageState extends State<HomePage> {
                 ScanHeader(model: model),
                 const Divider(height: 1),
                 Expanded(child: page),
+                if (_tab < 2) SelectionBar(model: model),
               ],
             );
             if (!wide) {

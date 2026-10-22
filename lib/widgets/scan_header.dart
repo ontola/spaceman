@@ -116,7 +116,8 @@ class ScanHeader extends StatelessWidget {
                 onPressed: model.showAccessIntro,
                 icon: const Icon(Icons.shield_outlined, size: 16),
                 label: const Text(
-                  'Protected folders are skipped. Grant Full Disk Access',
+                  'Desktop, Documents and other protected folders are skipped. '
+                  'Grant Full Disk Access',
                 ),
               ),
             ),

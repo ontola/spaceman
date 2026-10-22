@@ -1,18 +1,76 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_model.dart';
 import '../format.dart';
 import '../src/rust/api/spaceman.dart';
-import '../widgets/item_actions.dart';
+import '../widgets/selection_bar.dart';
 
 /// Drill-down view of where space is used, largest items first.
-class ExplorerScreen extends StatelessWidget {
+///
+/// Going up a level works like Finder: two-finger swipe right, the mouse
+/// back button, Cmd+[ or Cmd+Up.
+class ExplorerScreen extends StatefulWidget {
   const ExplorerScreen({super.key, required this.model});
 
   final AppModel model;
 
   @override
+  State<ExplorerScreen> createState() => _ExplorerScreenState();
+}
+
+class _ExplorerScreenState extends State<ExplorerScreen> {
+  /// Horizontal distance of the current trackpad gesture.
+  double _swipe = 0;
+  bool _swipeUsed = false;
+
+  AppModel get model => widget.model;
+
+  void _up() {
+    final crumbs = model.breadcrumbs(model.currentId);
+    if (crumbs.length > 1) model.open(crumbs[crumbs.length - 2].id);
+  }
+
+  void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (_swipeUsed) return;
+    // Only mostly-horizontal gestures; vertical ones scroll the list.
+    if (e.pan.dx.abs() < e.pan.dy.abs() * 2) return;
+    _swipe = e.pan.dx;
+    if (_swipe > 120) {
+      _swipeUsed = true;
+      _up();
+    }
+  }
+
+  void _onPanZoomEnd(PointerPanZoomEndEvent e) {
+    _swipe = 0;
+    _swipeUsed = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): _up,
+        const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
+        const SingleActivator(LogicalKeyboardKey.backspace): _up,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Listener(
+          onPointerPanZoomUpdate: _onPanZoomUpdate,
+          onPointerPanZoomEnd: _onPanZoomEnd,
+          onPointerDown: (e) {
+            if (e.buttons & kBackMouseButton != 0) _up();
+          },
+          child: _buildContent(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (model.rootNode == null) {
       return Center(
         child: Text(
@@ -121,12 +179,28 @@ class _NodeRow extends StatelessWidget {
       EntryKind.smallFiles => Icons.layers_outlined,
     };
     final protected = node.protection == ProtectionState.protected;
+    final selectable =
+        node.kind != EntryKind.smallFiles &&
+        node.protection == ProtectionState.none;
 
     return ListTile(
       onTap: node.hasChildren ? () => model.open(node.id) : null,
-      leading: Icon(
-        icon,
-        color: node.kind == EntryKind.dir ? theme.colorScheme.primary : null,
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Checkbox(
+            value: selectable && model.isSelected(node.path),
+            onChanged: selectable
+                ? (v) => model.setSelected(node, v ?? false)
+                : null,
+          ),
+          Icon(
+            icon,
+            color: node.kind == EntryKind.dir
+                ? theme.colorScheme.primary
+                : null,
+          ),
+        ],
       ),
       title: Row(
         children: [
@@ -134,11 +208,18 @@ class _NodeRow extends StatelessWidget {
           if (protected) ...[
             const SizedBox(width: 6),
             Tooltip(
-              message: 'Do not touch',
-              child: Icon(
-                Icons.lock,
-                size: 16,
-                color: theme.colorScheme.tertiary,
+              message: model.protectedPaths.contains(node.path)
+                  ? 'Do not touch (click to allow again)'
+                  : 'Inside a folder marked do not touch',
+              child: InkWell(
+                onTap: model.protectedPaths.contains(node.path)
+                    ? () => model.unprotect(node.path)
+                    : null,
+                child: Icon(
+                  Icons.lock,
+                  size: 16,
+                  color: theme.colorScheme.tertiary,
+                ),
               ),
             ),
           ] else if (node.protection == ProtectionState.containsProtected) ...[
@@ -182,7 +263,7 @@ class _NodeRow extends StatelessWidget {
               ],
             ),
           ),
-          ItemMenu(model: model, node: node),
+          RevealButton(path: node.path),
         ],
       ),
     );
