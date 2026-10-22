@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context};
 
 use crate::core::cache;
+use crate::core::privacy;
 use crate::core::protect::{ProtectList, Protection};
 use crate::core::rules::{self, Category, Removal, Safety};
 use crate::core::scan::{self, ScanOptions, ScanProgress};
@@ -142,6 +143,12 @@ pub fn scanned_at() -> Option<i64> {
     STATE.read().unwrap().tree.as_ref().map(|t| t.scanned_at)
 }
 
+/// Whether the app can read everything without macOS permission prompts.
+#[flutter_rust_bridge::frb(sync)]
+pub fn has_full_disk_access() -> bool {
+    privacy::has_full_disk_access()
+}
+
 #[flutter_rust_bridge::frb(sync)]
 pub fn home_dir() -> Option<String> {
     home().map(|p| p.to_string_lossy().into_owned())
@@ -159,7 +166,10 @@ pub fn disk_space(path: String) -> Option<DiskSpace> {
 ///
 /// Unless `full` is set, directories that did not change since the loaded
 /// (or cached) scan are taken from it instead of being read again.
-pub fn scan_dir(root: String, full: bool, sink: StreamSink<ScanUpdate>) {
+///
+/// With `skip_prompting_folders`, folders that would make macOS ask for
+/// permission (Desktop, Documents, ...) are left out.
+pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: StreamSink<ScanUpdate>) {
     let progress = Arc::new(ScanProgress::default());
     if let Some(old) = RUNNING.lock().unwrap().replace(progress.clone()) {
         old.cancel.store(true, Ordering::Relaxed);
@@ -188,7 +198,13 @@ pub fn scan_dir(root: String, full: bool, sink: StreamSink<ScanUpdate>) {
         });
         let root = PathBuf::from(&root);
         let previous = if full { None } else { previous_scan(&root) };
-        let r = scan::scan_with_cache(&root, &ScanOptions::default(), &progress, previous.as_ref());
+        let mut opts = ScanOptions::default();
+        if skip_prompting_folders {
+            if let Some(h) = home() {
+                opts.skip = privacy::prompting_folders(&h);
+            }
+        }
+        let r = scan::scan_with_cache(&root, &opts, &progress, previous.as_ref());
         finished.store(true, Ordering::Relaxed);
         r
     });

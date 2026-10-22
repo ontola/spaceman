@@ -1,0 +1,156 @@
+import 'package:flutter/material.dart';
+
+import '../app_model.dart';
+import '../platform.dart';
+
+/// Shown on macOS before the first scan when SpaceMan lacks Full Disk
+/// Access. Without it, macOS asks separately for every protected folder
+/// (Desktop, Documents, Downloads, iCloud Drive, other apps' data, ...),
+/// so we explain that first and let the user pick.
+class AccessIntro extends StatefulWidget {
+  const AccessIntro({super.key, required this.model});
+
+  final AppModel model;
+
+  @override
+  State<AccessIntro> createState() => _AccessIntroState();
+}
+
+class _AccessIntroState extends State<AccessIntro> {
+  bool _openedSettings = false;
+  bool _stillMissing = false;
+
+  Future<void> _openSettings() async {
+    await openFullDiskAccessSettings();
+    setState(() {
+      _openedSettings = true;
+      _stillMissing = false;
+    });
+  }
+
+  void _recheck() {
+    if (!widget.model.recheckAccess()) setState(() => _stillMissing = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 48,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'SpaceMan needs to look at your whole disk',
+                style: theme.textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'To find out where your space goes, SpaceMan has to read every '
+                'folder. macOS protects many of them (Desktop, Documents, '
+                'Downloads, iCloud Drive, data of other apps) and would ask '
+                'you about each one separately.',
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Granting Full Disk Access once avoids all those prompts. '
+                'SpaceMan only reads sizes and never sends anything anywhere. '
+                'Nothing is removed unless you ask for it.',
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 24),
+              _Step(
+                number: 1,
+                text: 'Open System Settings > Privacy & Security > Full Disk Access.',
+              ),
+              _Step(
+                number: 2,
+                text: 'Turn on SpaceMan (use + to add it if it is not listed).',
+              ),
+              _Step(
+                number: 3,
+                text: 'If macOS offers to quit and reopen SpaceMan, accept.',
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _openSettings,
+                    icon: const Icon(Icons.settings),
+                    label: const Text('Open System Settings'),
+                  ),
+                  if (_openedSettings)
+                    OutlinedButton.icon(
+                      onPressed: _recheck,
+                      icon: const Icon(Icons.check),
+                      label: const Text("I've turned it on"),
+                    ),
+                ],
+              ),
+              if (_stillMissing) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'SpaceMan does not have access yet. If you just turned it on, '
+                  'quit and reopen SpaceMan.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+              const Divider(),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: widget.model.chooseLimitedAccess,
+                child: const Text('Scan without Full Disk Access'),
+              ),
+              Text(
+                'Skips the protected folders, so macOS will not ask anything. '
+                'Their space is not counted.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step({required this.number, required this.text});
+
+  final int number;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 12,
+            child: Text('$number', style: theme.textTheme.labelMedium),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
+    );
+  }
+}

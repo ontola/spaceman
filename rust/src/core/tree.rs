@@ -43,6 +43,8 @@ pub struct Tree {
     pub root_path: PathBuf,
     /// When the scan finished, in seconds since the Unix epoch.
     pub scanned_at: i64,
+    /// Directories left out of this scan (see `ScanOptions::skip`).
+    pub skipped: Vec<PathBuf>,
     pub nodes: Vec<Node>,
 }
 

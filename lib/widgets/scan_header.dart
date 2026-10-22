@@ -99,6 +99,21 @@ class ScanHeader extends StatelessWidget {
                 ),
             ],
           ),
+          if (model.access == DiskAccess.limited)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: model.showAccessIntro,
+                icon: const Icon(Icons.shield_outlined, size: 16),
+                label: const Text(
+                  'Protected folders are skipped. Grant Full Disk Access',
+                ),
+              ),
+            ),
           const SizedBox(height: 8),
           if (model.scanning)
             const LinearProgressIndicator()

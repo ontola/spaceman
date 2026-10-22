@@ -26,6 +26,10 @@ Future<PlatformInt64?> loadCachedScan({required String root}) =>
 /// Time of the scan currently loaded, in seconds since the epoch.
 PlatformInt64? scannedAt() => RustLib.instance.api.crateApiSpacemanScannedAt();
 
+/// Whether the app can read everything without macOS permission prompts.
+bool hasFullDiskAccess() =>
+    RustLib.instance.api.crateApiSpacemanHasFullDiskAccess();
+
 String? homeDir() => RustLib.instance.api.crateApiSpacemanHomeDir();
 
 DiskSpace? diskSpace({required String path}) =>
@@ -36,8 +40,18 @@ DiskSpace? diskSpace({required String path}) =>
 ///
 /// Unless `full` is set, directories that did not change since the loaded
 /// (or cached) scan are taken from it instead of being read again.
-Stream<ScanUpdate> scanDir({required String root, required bool full}) =>
-    RustLib.instance.api.crateApiSpacemanScanDir(root: root, full: full);
+///
+/// With `skip_prompting_folders`, folders that would make macOS ask for
+/// permission (Desktop, Documents, ...) are left out.
+Stream<ScanUpdate> scanDir({
+  required String root,
+  required bool full,
+  required bool skipPromptingFolders,
+}) => RustLib.instance.api.crateApiSpacemanScanDir(
+  root: root,
+  full: full,
+  skipPromptingFolders: skipPromptingFolders,
+);
 
 void cancelScan() => RustLib.instance.api.crateApiSpacemanCancelScan();
 

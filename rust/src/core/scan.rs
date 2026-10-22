@@ -26,11 +26,14 @@ pub struct ScanOptions {
     pub min_file_size: u64,
     /// Stay on the filesystem of the root directory.
     pub same_filesystem: bool,
+    /// Directories not to enter, e.g. privacy-protected folders that would
+    /// make macOS show a permission prompt.
+    pub skip: Vec<PathBuf>,
 }
 
 impl Default for ScanOptions {
     fn default() -> Self {
-        Self { min_file_size: 1024 * 1024, same_filesystem: true }
+        Self { min_file_size: 1024 * 1024, same_filesystem: true, skip: Vec::new() }
     }
 }
 
@@ -99,7 +102,9 @@ pub fn scan_with_cache(
         root_dev: device(&meta),
         #[cfg(unix)]
         seen_inodes: Default::default(),
-        previous: previous.filter(|p| p.root_path == root && p.root().is_some()),
+        // A cache made with a different skip list lacks (or has) whole
+        // folders, so it can't be trusted for unchanged directories.
+        previous: previous.filter(|p| p.root_path == root && p.root().is_some() && p.skipped == opts.skip),
     };
     let cached = ctx.previous.map(|_| Tree::ROOT);
     let dir = walk(root, String::new().into_boxed_str(), &meta, cached, &ctx);
@@ -110,7 +115,12 @@ pub fn scan_with_cache(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    let mut tree = Tree { root_path: root.to_path_buf(), scanned_at, nodes: Vec::new() };
+    let mut tree = Tree {
+        root_path: root.to_path_buf(),
+        scanned_at,
+        skipped: opts.skip.clone(),
+        nodes: Vec::new(),
+    };
     flatten(dir, None, &mut tree);
     Ok(tree)
 }
@@ -177,6 +187,9 @@ fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
         let ft = meta.file_type();
         if ft.is_dir() {
             if ctx.opts.same_filesystem && device(&meta) != ctx.root_dev {
+                continue;
+            }
+            if !ctx.opts.skip.is_empty() && ctx.opts.skip.contains(&entry.path()) {
                 continue;
             }
             let cached = cached_dirs.as_ref().and_then(|m| m.get(&*name).copied());

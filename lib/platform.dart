@@ -26,3 +26,10 @@ Future<void> reveal(String path) async {
 
 /// Whether removed items go to a trash the user can restore from.
 bool get hasTrash => Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+/// Opens the Full Disk Access pane of System Settings (macOS only).
+Future<void> openFullDiskAccessSettings() async {
+  await Process.run('open', [
+    'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+  ]);
+}

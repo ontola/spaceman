@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:spaceman/src/rust/frb_generated.dart';
 
 import 'app_model.dart';
+import 'screens/access_intro.dart';
 import 'screens/cleanup.dart';
 import 'screens/explorer.dart';
 import 'screens/protected.dart';
@@ -69,6 +70,11 @@ class _HomePageState extends State<HomePage> {
       listenable: widget.model,
       builder: (context, _) {
         final model = widget.model;
+        if (model.access == DiskAccess.undecided) {
+          return Scaffold(
+            body: SafeArea(child: AccessIntro(model: model)),
+          );
+        }
         final page = switch (_tab) {
           0 => ExplorerScreen(model: model),
           1 => CleanupScreen(model: model),

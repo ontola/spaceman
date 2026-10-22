@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1944842250;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -318292808;
 
 // Section: executor
 
@@ -231,6 +231,35 @@ fn wire__crate__api__spaceman__disk_space_impl(
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::spaceman::disk_space(api_path))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__spaceman__has_full_disk_access_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "has_full_disk_access",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>(crate::api::spaceman::has_full_disk_access())?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -446,6 +475,7 @@ fn wire__crate__api__spaceman__scan_dir_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_root = <String>::sse_decode(&mut deserializer);
             let api_full = <bool>::sse_decode(&mut deserializer);
+            let api_skip_prompting_folders = <bool>::sse_decode(&mut deserializer);
             let api_sink = <StreamSink<
                 crate::api::spaceman::ScanUpdate,
                 flutter_rust_bridge::for_generated::SseCodec,
@@ -454,7 +484,12 @@ fn wire__crate__api__spaceman__scan_dir_impl(
             move |context| {
                 transform_result_sse::<_, ()>((move || {
                     let output_ok = Ok::<_, ()>({
-                        crate::api::spaceman::scan_dir(api_root, api_full, api_sink);
+                        crate::api::spaceman::scan_dir(
+                            api_root,
+                            api_full,
+                            api_skip_prompting_folders,
+                            api_sink,
+                        );
                     })?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -904,10 +939,10 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         5 => wire__crate__api__spaceman__delete_paths_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__spaceman__init_app_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__spaceman__load_cached_scan_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__spaceman__scan_dir_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__spaceman__suggestions_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__spaceman__init_app_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__spaceman__load_cached_scan_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__spaceman__scan_dir_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__spaceman__suggestions_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -925,12 +960,13 @@ fn pde_ffi_dispatcher_sync_impl(
         3 => wire__crate__api__spaceman__children_impl(ptr, rust_vec_len, data_len),
         4 => wire__crate__api__spaceman__configure_impl(ptr, rust_vec_len, data_len),
         6 => wire__crate__api__spaceman__disk_space_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__spaceman__home_dir_impl(ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__spaceman__protect_path_impl(ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__spaceman__protected_paths_impl(ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__spaceman__root_node_impl(ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__spaceman__scanned_at_impl(ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__spaceman__unprotect_path_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__spaceman__has_full_disk_access_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__spaceman__home_dir_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__spaceman__protect_path_impl(ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__spaceman__protected_paths_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__spaceman__root_node_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__spaceman__scanned_at_impl(ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__spaceman__unprotect_path_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

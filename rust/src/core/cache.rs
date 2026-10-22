@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use super::tree::Tree;
 
 /// Bump whenever the serialized layout of [`Tree`] changes.
-const MAGIC: &[u8; 8] = b"SPCMAN01";
+const MAGIC: &[u8; 8] = b"SPCMAN02";
 
 /// Cache file for scans of `root` inside `cache_dir`.
 pub fn file_for(cache_dir: &Path, root: &Path) -> PathBuf {
@@ -78,6 +78,23 @@ mod tests {
         assert!(again.find(&root.join("a/b/big.bin")).is_some());
         assert_eq!(again.root().unwrap().file_count, 3);
         assert_eq!(progress.files.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn cache_with_other_skip_list_is_not_reused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        fs::create_dir_all(root.join("private")).unwrap();
+        fs::write(root.join("private/big.bin"), vec![1u8; 2 * 1024 * 1024]).unwrap();
+
+        let limited = ScanOptions { skip: vec![root.join("private")], ..Default::default() };
+        let first = scan_with_cache(&root, &limited, &ScanProgress::default(), None).unwrap();
+        assert!(first.find(&root.join("private")).is_none());
+
+        // Now with full access: the skipped folder must show up, even though
+        // the root directory itself did not change.
+        let full = scan_with_cache(&root, &ScanOptions::default(), &ScanProgress::default(), Some(&first)).unwrap();
+        assert!(full.find(&root.join("private/big.bin")).is_some());
     }
 
     #[test]

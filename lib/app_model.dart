@@ -6,6 +6,18 @@ import 'package:path_provider/path_provider.dart';
 
 import 'src/rust/api/spaceman.dart' as core;
 
+/// How much of the disk the app may read without macOS permission prompts.
+enum DiskAccess {
+  /// Full Disk Access granted, or not macOS.
+  full,
+
+  /// The user chose to scan without the folders that need permission.
+  limited,
+
+  /// No Full Disk Access and no choice made yet: explain before scanning.
+  undecided,
+}
+
 /// App-wide state. The scanned tree itself lives in Rust; this only keeps
 /// track of what the UI is showing and forwards actions to the core.
 class AppModel extends ChangeNotifier {
@@ -27,9 +39,12 @@ class AppModel extends ChangeNotifier {
 
   List<String> protectedPaths = [];
 
+  DiskAccess access = DiskAccess.full;
+
   StreamSubscription<core.ScanUpdate>? _scanSub;
 
   File get _lastRootFile => File('$_configDir/last_root.txt');
+  File get _limitedChoiceFile => File('$_configDir/limited_access');
 
   /// Loads settings and the cached scan, then refreshes it in the background.
   Future<void> init() async {
@@ -37,6 +52,11 @@ class AppModel extends ChangeNotifier {
     final cacheDir = (await getApplicationCacheDirectory()).path;
     core.configure(configDir: _configDir, cacheDir: cacheDir);
     protectedPaths = core.protectedPaths();
+    access = core.hasFullDiskAccess()
+        ? DiskAccess.full
+        : _limitedChoiceFile.existsSync()
+        ? DiskAccess.limited
+        : DiskAccess.undecided;
 
     root = await _initialRoot();
     notifyListeners();
@@ -76,13 +96,47 @@ class AppModel extends ChangeNotifier {
     scan();
   }
 
+  /// Scan without the folders that make macOS ask for permission.
+  Future<void> chooseLimitedAccess() async {
+    try {
+      await _limitedChoiceFile.parent.create(recursive: true);
+      await _limitedChoiceFile.writeAsString('');
+    } on FileSystemException {
+      // We will just ask again next launch.
+    }
+    access = DiskAccess.limited;
+    notifyListeners();
+    scan();
+  }
+
+  /// Goes back to the explanation, e.g. to grant Full Disk Access after all.
+  void showAccessIntro() {
+    access = DiskAccess.undecided;
+    notifyListeners();
+  }
+
+  /// Checks again after the user visited System Settings. Returns whether
+  /// Full Disk Access is now granted.
+  bool recheckAccess() {
+    if (!core.hasFullDiskAccess()) return false;
+    access = DiskAccess.full;
+    notifyListeners();
+    scan();
+    return true;
+  }
+
   /// Scans [root]. Unless [full] is set, unchanged folders come from cache.
   void scan({bool full = false}) {
+    if (access == DiskAccess.undecided) return;
     _scanSub?.cancel();
     lastError = null;
     progress = null;
     _scanSub = core
-        .scanDir(root: root, full: full)
+        .scanDir(
+          root: root,
+          full: full,
+          skipPromptingFolders: access == DiskAccess.limited,
+        )
         .listen(
           (update) {
             progress = update;
