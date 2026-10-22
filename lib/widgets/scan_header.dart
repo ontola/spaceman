@@ -167,12 +167,9 @@ class _NotScanned extends StatelessWidget {
     ];
     return Align(
       alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.zero,
-          visualDensity: VisualDensity.compact,
-        ),
-        onPressed: () => showDialog<void>(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () => showDialog<void>(
           context: context,
           builder: (context) => _NotScannedDialog(
             root: model.root,
@@ -181,8 +178,17 @@ class _NotScanned extends StatelessWidget {
             unreadable: unreadable,
           ),
         ),
-        icon: const Icon(Icons.help_outline, size: 16),
-        label: Text(parts.join(' · ')),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(
+            parts.join(' · '),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              decoration: TextDecoration.underline,
+              decorationStyle: TextDecorationStyle.dotted,
+            ),
+          ),
+        ),
       ),
     );
   }

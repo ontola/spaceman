@@ -151,19 +151,17 @@ class _SectionState extends State<_Section> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 2),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
           child: Row(
             children: [
-              Expanded(
+              Tooltip(
+                message: widget.subtitle,
                 child: Text(widget.title, style: theme.textTheme.titleMedium),
               ),
+              const Spacer(),
               Text(formatBytes(total), style: theme.textTheme.titleMedium),
             ],
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-          child: Text(widget.subtitle, style: theme.textTheme.bodySmall),
         ),
         ...rows.take(rows.length - hidden),
         if (hidden > 0)
@@ -234,40 +232,35 @@ class _ItemRow extends StatelessWidget {
       RemovalMode.contents => 'The folder stays, its contents are removed.',
       RemovalMode.whole => null,
     };
+    final path = _short(s.node.path, home);
+    final isFile = s.node.kind == EntryKind.file;
     return ListTile(
       contentPadding: EdgeInsets.only(left: inGroup ? 40 : 16, right: 16),
       onTap: () => model.setSelected(s.node, !model.isSelected(s.node.path)),
-      title: Text(
-        inGroup ? _short(s.node.path, home) : s.title,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: inGroup
-          ? _SizeBar(fraction)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SizeBar(fraction),
-                Text(s.reason),
-                if (note != null)
-                  Text(
-                    note,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                Text(
-                  _short(s.node.path, home),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+      leading: inGroup
+          ? null
+          : Icon(
+              isFile ? Icons.insert_drive_file_outlined : Icons.folder,
+              color: isFile ? null : theme.colorScheme.primary,
             ),
+      // The details are there when wanted, not in the way.
+      title: Tooltip(
+        message: [if (!inGroup) s.reason, ?note, path].join('\n'),
+        waitDuration: const Duration(milliseconds: 400),
+        child: Text(inGroup ? path : s.title, overflow: TextOverflow.ellipsis),
+      ),
+      subtitle: _SizeBar(fraction),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(formatBytes(s.node.size), style: theme.textTheme.titleSmall),
+          SizedBox(
+            width: 80,
+            child: Text(
+              formatBytes(s.node.size),
+              textAlign: TextAlign.end,
+              style: theme.textTheme.titleSmall,
+            ),
+          ),
           const SizedBox(width: leadingGap),
           RevealButton(path: s.node.path),
           const SizedBox(width: leadingGap),
@@ -321,10 +314,18 @@ class _GroupRowState extends State<_GroupRow> {
       children: [
         ListTile(
           onTap: () => setState(() => _open = !_open),
+          leading: Icon(Icons.folder_copy, color: theme.colorScheme.primary),
           title: Row(
             children: [
               Flexible(
-                child: Text(items.first.title, overflow: TextOverflow.ellipsis),
+                child: Tooltip(
+                  message: items.first.reason,
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: Text(
+                    '${items.first.title} (${items.length})',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
               const SizedBox(width: 4),
               AnimatedRotation(
@@ -338,20 +339,18 @@ class _GroupRowState extends State<_GroupRow> {
               ),
             ],
           ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SizeBar(widget.fraction),
-              Text(
-                '${items.length} folders. ${items.first.reason}',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+          subtitle: _SizeBar(widget.fraction),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(formatBytes(_sum(items)), style: theme.textTheme.titleSmall),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  formatBytes(_sum(items)),
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
               const SizedBox(width: leadingGap),
               // Keeps the checkbox in line with the item rows.
               const SizedBox(width: leadingSlot * 2 + leadingGap * 2),
