@@ -213,6 +213,7 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
         r
     });
 
+    let mut save = false;
     let error = match result {
         Ok(tree) => {
             let mut state = STATE.write().unwrap();
@@ -220,10 +221,8 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
             let keep_old = tree.partial
                 && state.tree.as_ref().is_some_and(|t| t.root_path == tree.root_path && !t.partial);
             if !keep_old {
-                // Partial trees are safe to cache: folders the scan did not
-                // finish carry no stamp, so the next scan reads them.
-                save_cache(state.cache_dir.as_deref(), &tree);
                 state.tree = Some(tree);
+                save = true;
             }
             None
         }
@@ -235,7 +234,19 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
             *running = None;
         }
     }
+    // Tell the UI first; writing a cache of millions of entries takes a while.
     let _ = sink.add(update(true, error));
+    if save {
+        // Partial trees are safe to cache: folders the scan did not finish
+        // carry no stamp, so the next scan reads them. Only a read lock is
+        // held, so the UI keeps browsing meanwhile.
+        std::thread::spawn(|| {
+            let state = STATE.read().unwrap();
+            if let Some(tree) = state.tree.as_ref() {
+                save_cache(state.cache_dir.as_deref(), tree);
+            }
+        });
+    }
 }
 
 /// The scan to reuse unchanged directories from. Read from the cache file

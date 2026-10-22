@@ -22,7 +22,9 @@ class ScanHeader extends StatelessWidget {
     final p = model.progress;
 
     final String status;
-    if (model.scanning) {
+    if (model.stopping) {
+      status = 'Stopping...';
+    } else if (model.scanning) {
       status = p == null
           ? 'Starting scan...'
           : 'Scanning: ${formatCount(p.files)} files, ${formatBytes(p.bytes)}';

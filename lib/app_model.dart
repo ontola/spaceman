@@ -142,6 +142,7 @@ class AppModel extends ChangeNotifier {
             progress = update;
             if (update.done) {
               _scanSub = null;
+              stopping = false;
               if (update.error != null) {
                 lastError = update.error;
               } else {
@@ -160,7 +161,12 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set between pressing Stop and the scanner handing over its results.
+  bool stopping = false;
+
   void cancelScan() {
+    stopping = true;
+    notifyListeners();
     core.cancelScan();
   }
 

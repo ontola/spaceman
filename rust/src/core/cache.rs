@@ -24,7 +24,10 @@ pub fn save(file: &Path, tree: &Tree) -> anyhow::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
-    let tmp = file.with_extension("bin.tmp");
+    // Unique per writer, so two saves in parallel never share a temp file.
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = file.with_extension(format!("{}-{seq}.tmp", std::process::id()));
     {
         let mut w = BufWriter::new(fs::File::create(&tmp)?);
         w.write_all(MAGIC)?;
