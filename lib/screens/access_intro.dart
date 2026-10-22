@@ -16,20 +16,31 @@ class AccessIntro extends StatefulWidget {
   State<AccessIntro> createState() => _AccessIntroState();
 }
 
-class _AccessIntroState extends State<AccessIntro> {
+class _AccessIntroState extends State<AccessIntro> with WidgetsBindingObserver {
   bool _openedSettings = false;
-  bool _stillMissing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Coming back from System Settings: continue right away if access was
+  /// granted. Usually macOS only applies it after a restart, though.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) widget.model.recheckAccess();
+  }
 
   Future<void> _openSettings() async {
     await openFullDiskAccessSettings();
-    setState(() {
-      _openedSettings = true;
-      _stillMissing = false;
-    });
-  }
-
-  void _recheck() {
-    if (!widget.model.recheckAccess()) setState(() => _stillMissing = true);
+    setState(() => _openedSettings = true);
   }
 
   @override
@@ -79,7 +90,10 @@ class _AccessIntroState extends State<AccessIntro> {
               ),
               _Step(
                 number: 3,
-                text: 'If macOS offers to quit and reopen SpaceMan, accept.',
+                text:
+                    'Restart SpaceMan: macOS only applies the access after a '
+                    'restart. Use "Quit & Reopen" if macOS offers it, or the '
+                    'button below.',
               ),
               const SizedBox(height: 24),
               Wrap(
@@ -92,23 +106,13 @@ class _AccessIntroState extends State<AccessIntro> {
                     label: const Text('Open System Settings'),
                   ),
                   if (_openedSettings)
-                    OutlinedButton.icon(
-                      onPressed: _recheck,
-                      icon: const Icon(Icons.check),
-                      label: const Text("I've turned it on"),
+                    FilledButton.tonalIcon(
+                      onPressed: relaunchApp,
+                      icon: const Icon(Icons.restart_alt),
+                      label: const Text('Restart SpaceMan'),
                     ),
                 ],
               ),
-              if (_stillMissing) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'SpaceMan does not have access yet. If you just turned it on, '
-                  'quit and reopen SpaceMan.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ],
               const SizedBox(height: 32),
               const Divider(),
               const SizedBox(height: 8),

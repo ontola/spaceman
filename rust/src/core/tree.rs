@@ -45,6 +45,8 @@ pub struct Tree {
     pub scanned_at: i64,
     /// Directories left out of this scan (see `ScanOptions::skip`).
     pub skipped: Vec<PathBuf>,
+    /// The scan was stopped early; folders it did not get to look empty.
+    pub partial: bool,
     pub nodes: Vec<Node>,
 }
 

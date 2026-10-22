@@ -53,8 +53,6 @@ pub enum ScanError {
     Root(PathBuf, std::io::Error),
     #[error("{0} is not a directory")]
     NotADirectory(PathBuf),
-    #[error("scan cancelled")]
-    Cancelled,
 }
 
 struct Ctx<'a> {
@@ -66,6 +64,9 @@ struct Ctx<'a> {
     #[cfg(unix)]
     seen_inodes: std::sync::Mutex<std::collections::HashSet<(u64, u64)>>,
     previous: Option<&'a Tree>,
+    /// Directories whose skipped children differ from the previous scan;
+    /// their cached listing is incomplete or too big, so read them again.
+    skip_changed: Vec<PathBuf>,
 }
 
 /// Intermediate owned tree, built in parallel and flattened afterwards.
@@ -102,15 +103,20 @@ pub fn scan_with_cache(
         root_dev: device(&meta),
         #[cfg(unix)]
         seen_inodes: Default::default(),
-        // A cache made with a different skip list lacks (or has) whole
-        // folders, so it can't be trusted for unchanged directories.
-        previous: previous.filter(|p| p.root_path == root && p.root().is_some() && p.skipped == opts.skip),
+        previous: previous.filter(|p| p.root_path == root && p.root().is_some()),
+        skip_changed: previous
+            .map(|p| {
+                p.skipped
+                    .iter()
+                    .filter(|d| !opts.skip.contains(d))
+                    .chain(opts.skip.iter().filter(|d| !p.skipped.contains(d)))
+                    .filter_map(|d| d.parent().map(Path::to_path_buf))
+                    .collect()
+            })
+            .unwrap_or_default(),
     };
     let cached = ctx.previous.map(|_| Tree::ROOT);
     let dir = walk(root, String::new().into_boxed_str(), &meta, cached, &ctx);
-    if progress.cancel.load(Ordering::Relaxed) {
-        return Err(ScanError::Cancelled);
-    }
     let scanned_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -119,6 +125,7 @@ pub fn scan_with_cache(
         root_path: root.to_path_buf(),
         scanned_at,
         skipped: opts.skip.clone(),
+        partial: progress.cancel.load(Ordering::Relaxed),
         nodes: Vec::new(),
     };
     flatten(dir, None, &mut tree);
@@ -138,12 +145,19 @@ fn walk(path: &Path, name: Box<str>, meta: &Metadata, cached: Option<NodeId>, ct
         dirs: Vec::new(),
     };
     ctx.progress.dirs.fetch_add(1, Ordering::Relaxed);
-    if ctx.progress.cancel.load(Ordering::Relaxed) {
+    if cancelled(ctx) {
+        // Not read: make sure the next scan reads it instead of trusting
+        // this empty listing.
+        out.stamp = 0;
         return out;
     }
 
     let subdirs = match (ctx.previous, cached) {
-        (Some(prev), Some(id)) if out.stamp != 0 && prev.nodes[id as usize].stamp == out.stamp => {
+        (Some(prev), Some(id))
+            if out.stamp != 0
+                && prev.nodes[id as usize].stamp == out.stamp
+                && !ctx.skip_changed.iter().any(|d| d == path) =>
+        {
             reuse_listing(path, prev, id, &mut out, ctx)
         }
         _ => read_listing(path, &mut out, ctx),
@@ -164,6 +178,10 @@ type Subdir = (PathBuf, Box<str>, Metadata, Option<NodeId>);
 
 /// Lists a directory from disk, recording its files in `out` and returning
 /// the subdirectories to descend into.
+fn cancelled(ctx: &Ctx) -> bool {
+    ctx.progress.cancel.load(Ordering::Relaxed)
+}
+
 fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
     let entries = match fs::read_dir(path) {
         Ok(e) => e,
@@ -178,6 +196,10 @@ fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
 
     let mut subdirs = Vec::new();
     for entry in entries.flatten() {
+        if cancelled(ctx) {
+            out.stamp = 0;
+            break;
+        }
         // symlink_metadata: never follow links.
         let Ok(meta) = entry.path().symlink_metadata() else {
             ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
@@ -211,6 +233,10 @@ fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
 fn reuse_listing(path: &Path, prev: &Tree, id: NodeId, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
     let mut subdirs = Vec::new();
     for &c in &prev.nodes[id as usize].children {
+        if cancelled(ctx) {
+            out.stamp = 0;
+            break;
+        }
         let n = &prev.nodes[c as usize];
         if n.removed {
             continue;

@@ -63,7 +63,10 @@ pub struct ScanUpdate {
     pub errors: i64,
     pub elapsed_ms: i64,
     pub done: bool,
-    /// Set when the scan failed or was cancelled.
+    /// The scan was stopped early. If there was no earlier scan to show,
+    /// what was scanned so far is shown instead.
+    pub partial: bool,
+    /// Set when the scan failed.
     pub error: Option<String>,
 }
 
@@ -182,6 +185,7 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
         errors: progress.errors.load(Ordering::Relaxed) as i64,
         elapsed_ms: start.elapsed().as_millis() as i64,
         done,
+        partial: progress.cancel.load(Ordering::Relaxed),
         error,
     };
 
@@ -211,9 +215,16 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
 
     let error = match result {
         Ok(tree) => {
-            let dir = STATE.read().unwrap().cache_dir.clone();
-            save_cache(dir.as_deref(), &tree);
-            STATE.write().unwrap().tree = Some(tree);
+            let mut state = STATE.write().unwrap();
+            // A stopped rescan is worse than the complete scan before it.
+            let keep_old = tree.partial
+                && state.tree.as_ref().is_some_and(|t| t.root_path == tree.root_path && !t.partial);
+            if !keep_old {
+                // Partial trees are safe to cache: folders the scan did not
+                // finish carry no stamp, so the next scan reads them.
+                save_cache(state.cache_dir.as_deref(), &tree);
+                state.tree = Some(tree);
+            }
             None
         }
         Err(e) => Some(e.to_string()),
@@ -350,9 +361,13 @@ pub fn delete_paths(paths: Vec<String>, permanent: bool) -> DeleteReport {
         let permanent = permanent || rules::removal_for(&path, home.as_deref()) == Removal::EmptyTrash;
         let mut any_failed = None;
         for target in targets {
-            if STATE.read().unwrap().protect.blocks_delete(&target) {
+            let state = STATE.read().unwrap();
+            // Emptying the caches folder must not wipe our own scan cache.
+            let ours = state.cache_dir.as_deref() == Some(target.as_path());
+            if ours || state.protect.blocks_delete(&target) {
                 continue;
             }
+            drop(state);
             match remove_from_disk(&target, permanent) {
                 Ok(()) => {
                     let mut state = STATE.write().unwrap();

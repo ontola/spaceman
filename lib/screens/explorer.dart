@@ -15,9 +15,13 @@ class ExplorerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (model.rootNode == null) {
       return Center(
-        child: model.scanning
-            ? const Text('Scanning for the first time...')
-            : const Text('No scan yet'),
+        child: Text(
+          model.scanning
+              ? 'Scanning this folder for the first time. '
+                    'Next time SpaceMan opens instantly from its cache.'
+              : 'No scan yet',
+          textAlign: TextAlign.center,
+        ),
       );
     }
     final crumbs = model.breadcrumbs(model.currentId);

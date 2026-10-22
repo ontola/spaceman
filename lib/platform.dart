@@ -33,3 +33,25 @@ Future<void> openFullDiskAccessSettings() async {
     'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
   ]);
 }
+
+/// Quits and starts the app again, e.g. so macOS applies a new permission.
+Future<void> relaunchApp() async {
+  if (Platform.isMacOS) {
+    // .../SpaceMan.app/Contents/MacOS/SpaceMan -> .../SpaceMan.app
+    final bundle = File(Platform.resolvedExecutable).parent.parent.parent.path;
+    // Wait for this process to exit before opening the app again,
+    // otherwise `open` just focuses the running instance.
+    await Process.start('/bin/sh', [
+      '-c',
+      'while kill -0 $pid 2>/dev/null; do sleep 0.1; done; open "\$0"',
+      bundle,
+    ], mode: ProcessStartMode.detached);
+  } else {
+    await Process.start(
+      Platform.resolvedExecutable,
+      [],
+      mode: ProcessStartMode.detached,
+    );
+  }
+  exit(0);
+}

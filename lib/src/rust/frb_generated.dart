@@ -758,8 +758,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ScanUpdate dco_decode_scan_update(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return ScanUpdate(
       files: dco_decode_i_64(arr[0]),
       dirs: dco_decode_i_64(arr[1]),
@@ -767,7 +767,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       errors: dco_decode_i_64(arr[3]),
       elapsedMs: dco_decode_i_64(arr[4]),
       done: dco_decode_bool(arr[5]),
-      error: dco_decode_opt_String(arr[6]),
+      partial: dco_decode_bool(arr[6]),
+      error: dco_decode_opt_String(arr[7]),
     );
   }
 
@@ -1058,6 +1059,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_errors = sse_decode_i_64(deserializer);
     var var_elapsedMs = sse_decode_i_64(deserializer);
     var var_done = sse_decode_bool(deserializer);
+    var var_partial = sse_decode_bool(deserializer);
     var var_error = sse_decode_opt_String(deserializer);
     return ScanUpdate(
       files: var_files,
@@ -1066,6 +1068,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       errors: var_errors,
       elapsedMs: var_elapsedMs,
       done: var_done,
+      partial: var_partial,
       error: var_error,
     );
   }
@@ -1362,6 +1365,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_64(self.errors, serializer);
     sse_encode_i_64(self.elapsedMs, serializer);
     sse_encode_bool(self.done, serializer);
+    sse_encode_bool(self.partial, serializer);
     sse_encode_opt_String(self.error, serializer);
   }
 

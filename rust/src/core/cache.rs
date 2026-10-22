@@ -81,7 +81,7 @@ mod tests {
     }
 
     #[test]
-    fn cache_with_other_skip_list_is_not_reused() {
+    fn changed_skip_list_rereads_only_affected_folders() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
         fs::create_dir_all(root.join("private")).unwrap();
@@ -95,6 +95,28 @@ mod tests {
         // the root directory itself did not change.
         let full = scan_with_cache(&root, &ScanOptions::default(), &ScanProgress::default(), Some(&first)).unwrap();
         assert!(full.find(&root.join("private/big.bin")).is_some());
+
+        // And back: the folder is left out again.
+        let again = scan_with_cache(&root, &limited, &ScanProgress::default(), Some(&full)).unwrap();
+        assert!(again.find(&root.join("private")).is_none());
+    }
+
+    #[test]
+    fn stopped_scan_is_partial_and_completed_next_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        fs::create_dir_all(root.join("a")).unwrap();
+        fs::write(root.join("a/big.bin"), vec![1u8; 2 * 1024 * 1024]).unwrap();
+
+        let stopped = ScanProgress::default();
+        stopped.cancel.store(true, Ordering::Relaxed);
+        let partial = scan_with_cache(&root, &ScanOptions::default(), &stopped, None).unwrap();
+        assert!(partial.partial);
+        assert_eq!(partial.root().unwrap().file_count, 0);
+
+        let full = scan_with_cache(&root, &ScanOptions::default(), &ScanProgress::default(), Some(&partial)).unwrap();
+        assert!(!full.partial);
+        assert!(full.find(&root.join("a/big.bin")).is_some());
     }
 
     #[test]

@@ -234,7 +234,11 @@ class ScanUpdate {
   final PlatformInt64 elapsedMs;
   final bool done;
 
-  /// Set when the scan failed or was cancelled.
+  /// The scan was stopped early. If there was no earlier scan to show,
+  /// what was scanned so far is shown instead.
+  final bool partial;
+
+  /// Set when the scan failed.
   final String? error;
 
   const ScanUpdate({
@@ -244,6 +248,7 @@ class ScanUpdate {
     required this.errors,
     required this.elapsedMs,
     required this.done,
+    required this.partial,
     this.error,
   });
 
@@ -255,6 +260,7 @@ class ScanUpdate {
       errors.hashCode ^
       elapsedMs.hashCode ^
       done.hashCode ^
+      partial.hashCode ^
       error.hashCode;
 
   @override
@@ -268,6 +274,7 @@ class ScanUpdate {
           errors == other.errors &&
           elapsedMs == other.elapsedMs &&
           done == other.done &&
+          partial == other.partial &&
           error == other.error;
 }
 

@@ -860,6 +860,7 @@ impl SseDecode for crate::api::spaceman::ScanUpdate {
         let mut var_errors = <i64>::sse_decode(deserializer);
         let mut var_elapsedMs = <i64>::sse_decode(deserializer);
         let mut var_done = <bool>::sse_decode(deserializer);
+        let mut var_partial = <bool>::sse_decode(deserializer);
         let mut var_error = <Option<String>>::sse_decode(deserializer);
         return crate::api::spaceman::ScanUpdate {
             files: var_files,
@@ -868,6 +869,7 @@ impl SseDecode for crate::api::spaceman::ScanUpdate {
             errors: var_errors,
             elapsed_ms: var_elapsedMs,
             done: var_done,
+            partial: var_partial,
             error: var_error,
         };
     }
@@ -1141,6 +1143,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::spaceman::ScanUpdate {
             self.errors.into_into_dart().into_dart(),
             self.elapsed_ms.into_into_dart().into_dart(),
             self.done.into_into_dart().into_dart(),
+            self.partial.into_into_dart().into_dart(),
             self.error.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -1443,6 +1446,7 @@ impl SseEncode for crate::api::spaceman::ScanUpdate {
         <i64>::sse_encode(self.errors, serializer);
         <i64>::sse_encode(self.elapsed_ms, serializer);
         <bool>::sse_encode(self.done, serializer);
+        <bool>::sse_encode(self.partial, serializer);
         <Option<String>>::sse_encode(self.error, serializer);
     }
 }

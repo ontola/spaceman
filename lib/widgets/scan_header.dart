@@ -28,6 +28,10 @@ class ScanHeader extends StatelessWidget {
           : 'Scanning: ${formatCount(p.files)} files, ${formatBytes(p.bytes)}';
     } else if (model.lastError != null) {
       status = model.lastError!;
+    } else if (p != null && p.done && p.partial) {
+      status =
+          'Scan stopped after ${formatCount(p.files)} files. '
+          'Rescan to complete it.';
     } else if (p != null && p.done) {
       status =
           'Scanned ${formatCount(p.files)} files in ${(p.elapsedMs / 1000).toStringAsFixed(1)} s'
