@@ -323,6 +323,15 @@ pub fn suggestions() -> Vec<SuggestionView> {
         .collect()
 }
 
+/// The scanned item at `path`, if the current scan has it.
+#[flutter_rust_bridge::frb(sync)]
+pub fn node_at(path: String) -> Option<NodeView> {
+    let state = STATE.read().unwrap();
+    let tree = state.tree.as_ref()?;
+    let id = tree.find(Path::new(&path))?;
+    Some(view(tree, &state.protect, id))
+}
+
 #[flutter_rust_bridge::frb(sync)]
 pub fn protected_paths() -> Vec<String> {
     let state = STATE.read().unwrap();

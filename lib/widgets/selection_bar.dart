@@ -243,16 +243,15 @@ class ProtectToggle extends StatelessWidget {
     }
     final own = model.protectedPaths.contains(node.path);
     final inherited = !own && node.protection == ProtectionState.protected;
-    return SizedBox.square(
-      dimension: leadingSlot,
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        tooltip: own
-            ? 'Do not touch (click to allow again)'
-            : inherited
-            ? 'Inside a folder marked do not touch'
-            : 'Mark as do not touch',
-        onPressed: inherited
+    return Tooltip(
+      message: own
+          ? 'Do not touch (click to allow again)'
+          : inherited
+          ? 'Inside a folder marked do not touch'
+          : 'Mark as do not touch',
+      child: InkResponse(
+        radius: 18,
+        onTap: inherited
             ? null
             : () {
                 if (own) {
@@ -263,25 +262,29 @@ class ProtectToggle extends StatelessWidget {
                   model.protect(node.path);
                 }
               },
-        icon: Icon(
-          own || inherited ? Icons.lock : Icons.lock_open_outlined,
-          size: 18,
-          // Same weight as an unticked checkbox; inherited locks are
-          // dimmed like a disabled control.
-          color: own
-              ? theme.colorScheme.tertiary
-              : inherited
-              ? theme.colorScheme.tertiary.withValues(alpha: 0.45)
-              : theme.colorScheme.onSurfaceVariant,
+        child: SizedBox.square(
+          dimension: leadingSlot,
+          child: Icon(
+            own || inherited ? Icons.lock : Icons.lock_open_outlined,
+            size: 20,
+            // Same weight as an unticked checkbox; inherited locks are
+            // dimmed like a disabled control.
+            color: own
+                ? theme.colorScheme.tertiary
+                : inherited
+                ? theme.colorScheme.tertiary.withValues(alpha: 0.45)
+                : theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
   }
 }
 
-/// Width of each control in front of a row (lock, checkbox), so they line
-/// up with equal gaps.
-const double leadingSlot = 36;
+/// Size of each control in front of a row (lock, checkbox, icon), placed
+/// [leadingGap] apart so the gaps look equal.
+const double leadingSlot = 24;
+const double leadingGap = 12;
 
 /// Compact checkbox that fits a [leadingSlot].
 class RowCheckbox extends StatelessWidget {
@@ -296,7 +299,7 @@ class RowCheckbox extends StatelessWidget {
     child: Checkbox(
       value: value,
       onChanged: onChanged,
-      visualDensity: VisualDensity.compact,
+      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     ),
   );

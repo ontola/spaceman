@@ -2,6 +2,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../app_model.dart';
+import '../format.dart';
+import '../src/rust/api/spaceman.dart' as core;
 
 /// Paths the user never wants suggested or removed.
 class ProtectedScreen extends StatelessWidget {
@@ -17,7 +19,12 @@ class ProtectedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final paths = model.protectedPaths;
+    // Largest first; items the current scan did not see go last.
+    final items = [
+      for (final p in model.protectedPaths)
+        (path: p, node: core.nodeAt(path: p)),
+    ]..sort((a, b) => (b.node?.size ?? -1).compareTo(a.node?.size ?? -1));
+    final total = items.fold<int>(0, (sum, i) => sum + (i.node?.size ?? 0));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -27,6 +34,7 @@ class ProtectedScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
+                  '${items.isEmpty ? '' : '${formatBytes(total)} kept safe. '}'
                   'Items here, and everything inside them, are never suggested '
                   'and can not be removed from SpaceMan.',
                   style: theme.textTheme.bodyMedium,
@@ -42,27 +50,40 @@ class ProtectedScreen extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: paths.isEmpty
+          child: items.isEmpty
               ? Center(
                   child: Text(
-                    'Nothing marked yet. Use "Do not touch" in the ... menu of any item.',
+                    'Nothing marked yet. Click the lock in front of any item.',
                     style: theme.textTheme.bodyMedium,
                     textAlign: TextAlign.center,
                   ),
                 )
               : ListView(
                   children: [
-                    for (final p in paths)
+                    for (final i in items)
                       ListTile(
                         leading: Icon(
                           Icons.lock,
                           color: theme.colorScheme.tertiary,
                         ),
-                        title: Text(p, overflow: TextOverflow.ellipsis),
-                        trailing: IconButton(
-                          tooltip: 'Allow touching again',
-                          icon: const Icon(Icons.close),
-                          onPressed: () => model.unprotect(p),
+                        title: Text(i.path, overflow: TextOverflow.ellipsis),
+                        subtitle: i.node == null
+                            ? const Text('Not in the current scan')
+                            : Text('${formatCount(i.node!.fileCount)} files'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (i.node != null)
+                              Text(
+                                formatBytes(i.node!.size),
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            IconButton(
+                              tooltip: 'Allow touching again',
+                              icon: const Icon(Icons.close),
+                              onPressed: () => model.unprotect(i.path),
+                            ),
+                          ],
                         ),
                       ),
                   ],

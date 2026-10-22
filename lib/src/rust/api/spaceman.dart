@@ -68,6 +68,10 @@ List<NodeView> breadcrumbs({required int id}) =>
 Future<List<SuggestionView>> suggestions() =>
     RustLib.instance.api.crateApiSpacemanSuggestions();
 
+/// The scanned item at `path`, if the current scan has it.
+NodeView? nodeAt({required String path}) =>
+    RustLib.instance.api.crateApiSpacemanNodeAt(path: path);
+
 List<String> protectedPaths() =>
     RustLib.instance.api.crateApiSpacemanProtectedPaths();
 

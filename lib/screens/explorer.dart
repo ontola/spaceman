@@ -254,12 +254,14 @@ class _NodeRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ProtectToggle(model: model, node: node),
+          const SizedBox(width: leadingGap),
           RowCheckbox(
             value: selectable && model.isSelected(node.path),
             onChanged: selectable
                 ? (v) => model.setSelected(node, v ?? false)
                 : null,
           ),
+          const SizedBox(width: leadingGap),
           Icon(
             icon,
             color: node.kind == EntryKind.dir
