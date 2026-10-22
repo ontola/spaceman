@@ -159,13 +159,50 @@ Future<void> _confirmAndDelete(
 
   final report = await model.deleteSelection(permanent: permanent);
   if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
+  final messenger = ScaffoldMessenger.of(context);
+  if (report.failed.isEmpty) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Removed ${formatBytes(report.freed)}')),
+    );
+    return;
+  }
+  // Failures stay until dismissed, so they can be read.
+  messenger.showSnackBar(
     SnackBar(
+      duration: const Duration(days: 1),
+      showCloseIcon: true,
       content: Text(
-        report.failed.isEmpty
-            ? 'Removed ${formatBytes(report.freed)}'
-            : 'Removed ${formatBytes(report.freed)}. '
-                  '${report.failed.length} failed: ${report.failed.first.reason}',
+        'Removed ${formatBytes(report.freed)}. '
+        '${report.failed.length} could not be removed.',
+      ),
+      action: SnackBarAction(
+        label: 'Details',
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Not removed'),
+            content: SizedBox(
+              width: 500,
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final f in report.failed)
+                    ListTile(
+                      dense: true,
+                      title: Text(f.path),
+                      subtitle: Text(f.reason),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
       ),
     ),
   );

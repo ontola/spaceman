@@ -353,6 +353,12 @@ pub fn delete_paths(paths: Vec<String>, permanent: bool) -> DeleteReport {
     paths.sort_by_key(|p| rules::removal_for(Path::new(p), home.as_deref()) != Removal::EmptyTrash);
     for p in paths {
         let path = PathBuf::from(&p);
+        // Already gone (removed outside SpaceMan, or twice in one selection):
+        // that is what the user wanted, so it is not a failure.
+        if std::fs::symlink_metadata(&path).is_err() {
+            report.deleted.push(p);
+            continue;
+        }
         // Validate under a short read lock, but never hold the lock while
         // touching the disk: the UI reads the tree synchronously.
         if let Err(e) = check_deletable(&STATE.read().unwrap(), &path) {
@@ -431,8 +437,13 @@ fn check_deletable(state: &State, path: &Path) -> anyhow::Result<()> {
         bail!("this item is marked as do not touch");
     }
     let tree = state.tree.as_ref().context("no scan loaded")?;
-    let id = tree.find(path).context("item is not part of the current scan")?;
-    if id == Tree::ROOT {
+    // The tree can lag behind what the user selected (e.g. a rescan that
+    // skipped protected folders replaced it), so anything inside the
+    // scanned folder may go, even if this scan did not see it.
+    if !path.starts_with(&tree.root_path) {
+        bail!("item is outside the scanned folder");
+    }
+    if path == tree.root_path {
         bail!("refusing to delete the scanned folder itself");
     }
     if home().as_deref() == Some(path) {
