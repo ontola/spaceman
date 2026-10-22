@@ -6,6 +6,7 @@ import 'screens/access_intro.dart';
 import 'screens/cleanup.dart';
 import 'screens/explorer.dart';
 import 'screens/protected.dart';
+import 'widgets/fly_to.dart';
 import 'widgets/scan_header.dart';
 import 'widgets/selection_bar.dart';
 
@@ -106,10 +107,20 @@ class _HomePageState extends State<HomePage> {
                     for (final (i, d) in _destinations.indexed)
                       NavigationDestination(
                         icon: _badge(
-                          Icon(d.icon),
+                          i == 2
+                              ? KeyedSubtree(
+                                  key: doNotTouchTarget,
+                                  child: Icon(d.icon),
+                                )
+                              : Icon(d.icon),
                           i == 1 ? cleanupBadge : null,
                         ),
-                        selectedIcon: Icon(d.active),
+                        selectedIcon: i == 2
+                            ? KeyedSubtree(
+                                key: doNotTouchTarget,
+                                child: Icon(d.active),
+                              )
+                            : Icon(d.active),
                         label: d.label,
                       ),
                   ],
@@ -131,10 +142,20 @@ class _HomePageState extends State<HomePage> {
                       for (final (i, d) in _destinations.indexed)
                         NavigationRailDestination(
                           icon: _badge(
-                            Icon(d.icon),
+                            i == 2
+                                ? KeyedSubtree(
+                                    key: doNotTouchTarget,
+                                    child: Icon(d.icon),
+                                  )
+                                : Icon(d.icon),
                             i == 1 ? cleanupBadge : null,
                           ),
-                          selectedIcon: Icon(d.active),
+                          selectedIcon: i == 2
+                              ? KeyedSubtree(
+                                  key: doNotTouchTarget,
+                                  child: Icon(d.active),
+                                )
+                              : Icon(d.active),
                           label: Text(d.label),
                         ),
                     ],

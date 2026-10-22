@@ -4,6 +4,7 @@ import '../app_model.dart';
 import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
+import 'fly_to.dart';
 
 /// Bottom bar with everything that is ticked, and actions for all of it.
 class SelectionBar extends StatefulWidget {
@@ -248,7 +249,15 @@ class ProtectToggle extends StatelessWidget {
           : 'Mark as do not touch',
       onPressed: inherited
           ? null
-          : () => own ? model.unprotect(node.path) : model.protect(node.path),
+          : () {
+              if (own) {
+                model.unprotect(node.path);
+              } else {
+                // Start the flight before the row changes or disappears.
+                flyToDoNotTouch(context, node.name);
+                model.protect(node.path);
+              }
+            },
       icon: Icon(
         own || inherited ? Icons.lock : Icons.lock_open_outlined,
         size: 18,
