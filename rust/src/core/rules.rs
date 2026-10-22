@@ -1,6 +1,6 @@
 //! Cleanup suggestions: rules that recognise space which can safely be
 //! reclaimed (caches, build output, trash) or is worth a second look
-//! (large files that have not been touched in a long time).
+//! (very large files).
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -39,10 +39,13 @@ pub struct Suggestion {
     pub removal: Removal,
 }
 
-/// Ignore anything smaller than this; not worth the user's attention.
-const MIN_SIZE: u64 = 10 * 1024 * 1024;
-const LARGE_FILE: u64 = 500 * 1024 * 1024;
-const OLD_SECS: i64 = 180 * 24 * 3600;
+/// Well-known folders (caches, trash) smaller than this are not worth
+/// the user's attention.
+const MIN_SIZE: u64 = 50 * 1024 * 1024;
+/// Project build output is everywhere; only bigger chunks are listed.
+const MIN_BUILD_OUTPUT: u64 = 100 * 1024 * 1024;
+/// Single files at least this big are worth a look, whatever they are.
+const LARGE_FILE: u64 = 1024 * 1024 * 1024;
 
 /// How a suggested directory is cleaned up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,11 +109,17 @@ const HOME_RULES: &[HomeRule] = &[
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 const HOME_RULES: &[HomeRule] = &[
     HomeRule { rel: ".local/share/Trash/files", removal: EmptyTrash, title: "Trash", reason: "Files in the Trash still take up space until it is emptied.", category: Trash, safety: Review },
-    HomeRule { rel: ".cache", removal: Contents, title: "App caches", reason: "Apps store temporary data here and recreate it when needed.", category: Cache, safety: Safe },
 ];
 
 /// Cross-platform developer and package manager caches.
 const COMMON_HOME_RULES: &[HomeRule] = &[
+    HomeRule { rel: ".cache", removal: Contents, title: "Tool caches", reason: "Command line tools keep downloads and caches here (pip, uv, Hugging Face, ...). They fetch them again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: ".pnpm-store", removal: Whole, title: "pnpm store", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "Library/pnpm/store", removal: Whole, title: "pnpm store", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: ".yarn/berry/cache", removal: Whole, title: "Yarn cache", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: ".bun/install/cache", removal: Whole, title: "Bun cache", reason: "Downloaded packages, fetched again when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "go/pkg/mod", removal: Whole, title: "Go module cache", reason: "Downloaded Go modules, fetched again when needed. Prefer `go clean -modcache`.", category: Cache, safety: Safe },
+    HomeRule { rel: ".nuget/packages", removal: Whole, title: "NuGet cache", reason: "Downloaded .NET packages, fetched again when needed.", category: Cache, safety: Safe },
     HomeRule { rel: ".npm/_cacache", removal: Whole, title: "npm cache", reason: "Downloaded npm packages, fetched again when needed.", category: Cache, safety: Safe },
     HomeRule { rel: ".gradle/caches", removal: Whole, title: "Gradle cache", reason: "Downloaded dependencies and build caches for Gradle.", category: Cache, safety: Safe },
     HomeRule { rel: ".cargo/registry/cache", removal: Whole, title: "Cargo download cache", reason: "Downloaded Rust crates, fetched again when needed.", category: Cache, safety: Safe },
@@ -140,7 +149,7 @@ pub fn suggest(tree: &Tree, home: Option<&Path>, protect: &ProtectList) -> Vec<S
     let mut stack = vec![Tree::ROOT];
     while let Some(id) = stack.pop() {
         let Some(node) = tree.get(id) else { continue };
-        if node.size < MIN_SIZE || node.kind == NodeKind::Aggregate {
+        if node.size < MIN_SIZE.min(LARGE_FILE) || node.kind == NodeKind::Aggregate {
             continue;
         }
         let path = tree.path(id);
@@ -150,12 +159,18 @@ pub fn suggest(tree: &Tree, home: Option<&Path>, protect: &ProtectList) -> Vec<S
         }
 
         if node.kind == NodeKind::File {
-            if node.size >= LARGE_FILE && node.modified > 0 && now - node.modified > OLD_SECS {
+            if node.size >= LARGE_FILE {
+                let days = if node.modified > 0 { (now - node.modified) / 86400 } else { -1 };
                 out.push(Suggestion {
                     node: id,
                     size: node.size,
                     title: node.name.to_string(),
-                    reason: format!("Large file, not modified in {} days.", (now - node.modified) / 86400),
+                    reason: match days {
+                        d if d < 0 => "Very large file.".to_string(),
+                        0 => "Very large file, changed today.".to_string(),
+                        1 => "Very large file, last changed yesterday.".to_string(),
+                        d => format!("Very large file, last changed {d} days ago."),
+                    },
                     category: LargeOldFile,
                     safety: Review,
                     removal: Whole,
@@ -169,7 +184,11 @@ pub fn suggest(tree: &Tree, home: Option<&Path>, protect: &ProtectList) -> Vec<S
         // whole, but its other children still can.
         if protection == Protection::None {
             if let Some(s) = match_dir(id, &path, &node.name, node.size, home) {
-                out.push(s);
+                let min = if s.category == BuildOutput { MIN_BUILD_OUTPUT } else { MIN_SIZE };
+                if s.size >= min {
+                    out.push(s);
+                }
+                // Never look inside a match: no nested duplicates.
                 continue;
             }
         }
@@ -249,12 +268,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path();
         write(&home.join("code/app/package.json"), 10);
-        write(&home.join("code/app/node_modules/x/big.bin"), 11 * 1024 * 1024);
+        write(&home.join("code/app/node_modules/x/big.bin"), 101 * 1024 * 1024);
         write(&home.join("code/lib/Cargo.toml"), 10);
-        write(&home.join("code/lib/target/debug/big.bin"), 11 * 1024 * 1024);
+        write(&home.join("code/lib/target/debug/big.bin"), 101 * 1024 * 1024);
         // Named "target" but not a Rust project: must not be flagged.
-        write(&home.join("code/other/target/big.bin"), 11 * 1024 * 1024);
-        write(&home.join(".npm/_cacache/big.bin"), 11 * 1024 * 1024);
+        write(&home.join("code/other/target/big.bin"), 101 * 1024 * 1024);
+        write(&home.join(".npm/_cacache/big.bin"), 51 * 1024 * 1024);
 
         let tree = scan(home, &ScanOptions::default(), &ScanProgress::default()).unwrap();
         let mut protect = ProtectList::default();
