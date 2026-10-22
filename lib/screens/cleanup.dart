@@ -88,7 +88,7 @@ class _Section extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ProtectToggle(model: model, node: s.node),
-                Checkbox(
+                RowCheckbox(
                   value: model.isSelected(s.node.path),
                   onChanged: (v) => model.setSelected(s.node, v ?? false),
                 ),
