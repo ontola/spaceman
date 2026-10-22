@@ -222,9 +222,9 @@ class AppModel extends ChangeNotifier {
       path.startsWith(folder) &&
       (path[folder.length] == '/' || path[folder.length] == r'\');
 
-  Future<core.DeleteReport> deleteSelection() async {
+  Future<core.DeleteReport> deleteSelection({bool permanent = false}) async {
     final paths = selectionRoots.map((n) => n.path).toList();
-    final report = await delete(paths);
+    final report = await delete(paths, permanent: permanent);
     for (final p in report.deleted) {
       selection.removeWhere((key, _) => key == p || _isInside(key, p));
     }

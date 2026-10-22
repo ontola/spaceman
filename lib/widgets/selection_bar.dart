@@ -84,6 +84,18 @@ class _SelectionBarState extends State<SelectionBar> {
                   icon: const Icon(Icons.lock_outline),
                   label: const Text('Do not touch'),
                 ),
+                if (hasTrash) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _confirmAndDelete(context, model, permanent: true),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.colorScheme.error,
+                    ),
+                    icon: const Icon(Icons.delete_forever_outlined),
+                    label: const Text('Delete permanently'),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: () => _confirmAndDelete(context, model),
@@ -100,7 +112,13 @@ class _SelectionBarState extends State<SelectionBar> {
 }
 
 /// Asks for confirmation, removes the selection and reports the result.
-Future<void> _confirmAndDelete(BuildContext context, AppModel model) async {
+/// With [permanent] (or without a trash) nothing can be restored.
+Future<void> _confirmAndDelete(
+  BuildContext context,
+  AppModel model, {
+  bool permanent = false,
+}) async {
+  final toTrash = hasTrash && !permanent;
   final items = model.selectionRoots;
   final total = model.selectionSize;
   final what = items.length == 1
@@ -109,9 +127,11 @@ Future<void> _confirmAndDelete(BuildContext context, AppModel model) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(hasTrash ? 'Move $what to the Trash?' : 'Delete $what?'),
+      title: Text(
+        toTrash ? 'Move $what to the Trash?' : 'Delete $what permanently?',
+      ),
       content: Text(
-        hasTrash
+        toTrash
             ? 'This frees up to ${formatBytes(total)} once the Trash is emptied. '
                   'You can still restore it from the Trash.'
                   '${model.selectionEmptiesTrash ? '\n\nThe current contents of the Trash are deleted for good.' : ''}'
@@ -124,14 +144,20 @@ Future<void> _confirmAndDelete(BuildContext context, AppModel model) async {
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          child: Text(hasTrash ? 'Move to Trash' : 'Delete'),
+          style: toTrash
+              ? null
+              : FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+          child: Text(toTrash ? 'Move to Trash' : 'Delete permanently'),
         ),
       ],
     ),
   );
   if (ok != true || !context.mounted) return;
 
-  final report = await model.deleteSelection();
+  final report = await model.deleteSelection(permanent: permanent);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
