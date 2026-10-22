@@ -60,10 +60,15 @@ class AppModel extends ChangeNotifier {
 
     scannedAt = await core.loadCachedScan(root: root);
     if (scannedAt != null) _reloadTree();
+    loadingCache = false;
     notifyListeners();
     // With a cache this only revisits changed folders, so it is quick.
     scan();
   }
+
+  /// Still reading the cached scan at startup; there is nothing to say
+  /// about the folder yet.
+  bool loadingCache = true;
 
   Future<String> _initialRoot() async {
     try {

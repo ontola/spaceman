@@ -84,36 +84,50 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     if (parent != null) _go(parent);
   }
 
-  // Back swipe: two fingers on a trackpad, or one finger on a touch screen.
+  // Back swipe. On macOS two fingers on the trackpad arrive as raw
+  // pan/zoom pointer events (they never become a drag), so those are read
+  // directly; touch screens use a normal horizontal drag.
 
-  void _dragStart(DragStartDetails d) {
+  /// Whether the current trackpad gesture was claimed as a back swipe.
+  bool _panLocked = false;
+  bool _panRejected = false;
+  double _panDx = 0;
+  Duration _panTime = Duration.zero;
+  double _panVelocity = 0;
+
+  void _beginSwipe() {
     _t.stop();
     _dragging = true;
+    // Catching a back slide that is still running: pick up from where it
+    // is instead of jumping.
+    final continuing = _above == model.currentId && _below == _parentId;
     setState(() {
       _below = _parentId;
       _above = model.currentId;
     });
-    _t.value = 0;
+    if (!continuing) _t.value = 0;
   }
 
-  void _dragUpdate(DragUpdateDetails d) {
+  void _moveSwipe(double delta) {
     if (!_dragging) return;
     // At the top there is nowhere to go: resist like a rubber band.
     final resist = _below == null ? 0.15 : 1.0;
-    _t.value = (_t.value + d.primaryDelta! * resist / _width).clamp(0.0, 1.0);
+    _t.value = (_t.value + delta * resist / _width).clamp(0.0, 1.0);
   }
 
-  void _dragEnd(DragEndDetails d) {
+  /// Finishes the swipe from where the list is, always animating: going
+  /// up when far or fast enough, springing back otherwise.
+  void _endSwipe(double velocity) {
     if (!_dragging) return;
     _dragging = false;
-    final v = d.primaryVelocity ?? 0;
     final target = _below;
-    if (target != null && (v > 600 || (_t.value > 0.35 && v > -300))) {
+    final t = _t.value;
+    if (target != null && (velocity > 500 || (t > 0.3 && velocity > -200))) {
       _t
           .animateTo(
             1,
-            duration: _duration * (1 - _t.value),
-            curve: Curves.easeOut,
+            duration: _duration * (1 - t).clamp(0.3, 1.0),
+            curve: Curves.easeOutCubic,
           )
           .whenComplete(() {
             if (!mounted) return;
@@ -122,14 +136,57 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           });
     } else {
       _t
-          .animateBack(0, duration: _duration * _t.value, curve: Curves.easeOut)
+          .animateBack(
+            0,
+            duration: _duration * t.clamp(0.3, 1.0),
+            curve: Curves.easeOutCubic,
+          )
           .whenComplete(_clearTransition);
     }
+  }
+
+  void _onPanZoomStart(PointerPanZoomStartEvent e) {
+    _panLocked = _panRejected = false;
+    _panDx = 0;
+    _panTime = e.timeStamp;
+    _panVelocity = 0;
+  }
+
+  void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (_panRejected) return;
+    if (!_panLocked) {
+      // Decide once, after a little movement: mostly sideways to the right
+      // is a back swipe; anything else is left to the list (scrolling).
+      if (e.pan.distance < 6) return;
+      if (e.pan.dx <= 0 || e.pan.dx.abs() < e.pan.dy.abs() * 1.2) {
+        _panRejected = true;
+        return;
+      }
+      _panLocked = true;
+      _beginSwipe();
+    }
+    final delta = e.pan.dx - _panDx;
+    final dt = (e.timeStamp - _panTime).inMicroseconds / 1e6;
+    if (dt > 0) {
+      // Smoothed, so one jittery event does not decide the outcome.
+      _panVelocity = 0.7 * (delta / dt) + 0.3 * _panVelocity;
+    }
+    _panDx = e.pan.dx;
+    _panTime = e.timeStamp;
+    _moveSwipe(delta);
+  }
+
+  void _onPanZoomEnd(PointerPanZoomEndEvent e) {
+    if (_panLocked) _endSwipe(_panVelocity);
+    _panLocked = false;
   }
 
   @override
   Widget build(BuildContext context) {
     if (model.rootNode == null) {
+      if (model.loadingCache) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return Center(
         child: Text(
           model.scanning
@@ -153,20 +210,21 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           onPointerDown: (e) {
             if (e.buttons & kBackMouseButton != 0) _up();
           },
+          onPointerPanZoomStart: _onPanZoomStart,
+          onPointerPanZoomUpdate: _onPanZoomUpdate,
+          onPointerPanZoomEnd: _onPanZoomEnd,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Breadcrumbs(model: model, crumbs: crumbs, onOpen: _go),
               Expanded(
                 child: GestureDetector(
-                  // Only fingers swipe; mouse drags are left alone.
-                  supportedDevices: const {
-                    PointerDeviceKind.touch,
-                    PointerDeviceKind.trackpad,
-                  },
-                  onHorizontalDragStart: _dragStart,
-                  onHorizontalDragUpdate: _dragUpdate,
-                  onHorizontalDragEnd: _dragEnd,
+                  // Touch screens; the trackpad is handled above.
+                  supportedDevices: const {PointerDeviceKind.touch},
+                  onHorizontalDragStart: (_) => _beginSwipe(),
+                  onHorizontalDragUpdate: (d) => _moveSwipe(d.primaryDelta!),
+                  onHorizontalDragEnd: (d) => _endSwipe(d.primaryVelocity ?? 0),
+                  onHorizontalDragCancel: () => _endSwipe(0),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       _width = constraints.maxWidth;
@@ -293,12 +351,6 @@ class _Breadcrumbs extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
           children: [
-            if (crumbs.length > 1)
-              IconButton(
-                tooltip: 'Up',
-                icon: const Icon(Icons.arrow_upward),
-                onPressed: () => onOpen(crumbs[crumbs.length - 2].id),
-              ),
             for (final (i, c) in crumbs.indexed) ...[
               if (i > 0) const Icon(Icons.chevron_right, size: 18),
               TextButton(

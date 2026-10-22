@@ -108,20 +108,27 @@ class ScanHeader extends StatelessWidget {
           ),
           if (!model.scanning) _NotScanned(model: model),
           if (model.access == DiskAccess.limited)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'Desktop, Documents and other protected folders are skipped.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                onPressed: model.showAccessIntro,
-                icon: const Icon(Icons.shield_outlined, size: 16),
-                label: const Text(
-                  'Desktop, Documents and other protected folders are skipped. '
-                  'Grant Full Disk Access',
+                const SizedBox(width: 8),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: theme.textTheme.bodySmall,
+                  ),
+                  onPressed: model.showAccessIntro,
+                  child: const Text('Grant Full Disk Access'),
                 ),
-              ),
+              ],
             ),
           const SizedBox(height: 8),
           if (model.scanning)
