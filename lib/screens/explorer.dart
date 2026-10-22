@@ -122,26 +122,31 @@ class _Breadcrumbs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      reverse: true,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          if (crumbs.length > 1)
-            IconButton(
-              tooltip: 'Up',
-              icon: const Icon(Icons.arrow_upward),
-              onPressed: () => model.open(crumbs[crumbs.length - 2].id),
-            ),
-          for (final (i, c) in crumbs.indexed) ...[
-            if (i > 0) const Icon(Icons.chevron_right, size: 18),
-            TextButton(
-              onPressed: () => model.open(c.id),
-              child: Text(i == 0 ? _short(c.name) : c.name),
-            ),
+    // Left-aligned while it fits; once too long it scrolls, keeping the
+    // current folder (the end) in view.
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            if (crumbs.length > 1)
+              IconButton(
+                tooltip: 'Up',
+                icon: const Icon(Icons.arrow_upward),
+                onPressed: () => model.open(crumbs[crumbs.length - 2].id),
+              ),
+            for (final (i, c) in crumbs.indexed) ...[
+              if (i > 0) const Icon(Icons.chevron_right, size: 18),
+              TextButton(
+                onPressed: () => model.open(c.id),
+                child: Text(i == 0 ? _short(c.name) : c.name),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
