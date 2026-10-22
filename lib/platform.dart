@@ -1,5 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
+import 'src/rust/api/spaceman.dart' as core;
+
 /// Name of the system file manager, for menu labels.
 String get fileManagerName {
   if (Platform.isMacOS) return 'Finder';
@@ -26,6 +30,31 @@ Future<void> reveal(String path) async {
 
 /// Whether removed items go to a trash the user can restore from.
 bool get hasTrash => Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+/// Whether the system lets SpaceMan pick any folder by path. Android's
+/// picker hands out content URIs instead, so there the app scans all of
+/// shared storage and the explorer does the navigating.
+bool get canPickFolder => !Platform.isAndroid && !Platform.isIOS;
+
+const _storage = MethodChannel('spaceman/storage');
+
+/// Whether SpaceMan may read the whole disk: Full Disk Access on macOS,
+/// "All files access" on Android, always elsewhere.
+Future<bool> hasDiskAccess() async {
+  if (Platform.isAndroid) {
+    return await _storage.invokeMethod<bool>('hasAccess') ?? false;
+  }
+  return core.hasFullDiskAccess();
+}
+
+/// Asks Android for "All files access". On Android 11+ this opens Settings;
+/// the app checks again when it comes back to the foreground.
+Future<void> requestAndroidStorageAccess() =>
+    _storage.invokeMethod<void>('requestAccess');
+
+/// Root of Android's shared storage, usually /storage/emulated/0.
+Future<String?> androidStorageRoot() =>
+    _storage.invokeMethod<String>('storageRoot');
 
 /// Opens the Full Disk Access pane of System Settings (macOS only).
 Future<void> openFullDiskAccessSettings() async {

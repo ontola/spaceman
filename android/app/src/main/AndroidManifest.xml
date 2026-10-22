@@ -1,6 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- SpaceMan needs to see all files to tell where space goes, and to
+         remove what the user picks. Android 11+ uses "All files access";
+         older versions the classic storage permissions. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
     <application
-        android:label="spaceman"
+        android:label="SpaceMan"
+        android:requestLegacyExternalStorage="true"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

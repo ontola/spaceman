@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
 
 /// Paths the user never wants suggested or removed.
@@ -40,12 +41,14 @@ class ProtectedScreen extends StatelessWidget {
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _add,
-                icon: const Icon(Icons.add),
-                label: const Text('Add folder'),
-              ),
+              if (canPickFolder) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _add,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add folder'),
+                ),
+              ],
             ],
           ),
         ),

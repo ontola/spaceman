@@ -75,6 +75,24 @@ Trash. That rules out the Mac App Store; distribute it signed and notarized
 instead. To scan protected locations (Mail, Messages, other users' folders),
 grant SpaceMan *Full Disk Access* in System Settings > Privacy & Security.
 
+### Android notes
+
+SpaceMan scans shared storage (`/storage/emulated/0`) and needs *All files
+access* (`MANAGE_EXTERNAL_STORAGE`) for that; the app asks on first start.
+Android has no trash for apps, so removing deletes permanently. Other apps'
+private data (`Android/data`) stays out of reach, even with that permission.
+Google Play only allows this permission for file managers and the like, so
+for now the APK is installed directly.
+
+```sh
+flutter run -d <device>                    # needs the Android SDK and NDK
+flutter build apk --target-platform android-arm64
+```
+
+CI publishes `SpaceMan-Android.apk` with every development build. It is
+signed with CI's throwaway debug key, so uninstall the previous build before
+installing a new one.
+
 ## Ideas
 
 - FSEvents (macOS) / USN journal (Windows) for instant, exact incremental scans

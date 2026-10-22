@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
 import 'selection_bar.dart';
 
@@ -74,11 +75,12 @@ class ScanHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Choose folder',
-                onPressed: _pickFolder,
-                icon: const Icon(Icons.drive_folder_upload_outlined),
-              ),
+              if (canPickFolder)
+                IconButton(
+                  tooltip: 'Choose folder',
+                  onPressed: _pickFolder,
+                  icon: const Icon(Icons.drive_folder_upload_outlined),
+                ),
               if (model.scanning)
                 IconButton(
                   tooltip: 'Stop scan',

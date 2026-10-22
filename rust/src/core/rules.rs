@@ -106,7 +106,15 @@ const HOME_RULES: &[HomeRule] = &[
     HomeRule { rel: "AppData/Local/Docker", removal: Whole, title: "Docker data", reason: "Docker images and volumes. Prefer `docker system prune` to clean up.", category: Cache, safety: Review },
 ];
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+// On Android "home" is shared storage (/storage/emulated/0).
+#[cfg(target_os = "android")]
+const HOME_RULES: &[HomeRule] = &[
+    HomeRule { rel: "DCIM/.thumbnails", removal: Contents, title: "Photo thumbnails", reason: "Small previews of your photos. The gallery recreates them when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "Pictures/.thumbnails", removal: Contents, title: "Picture thumbnails", reason: "Small previews of your pictures. Recreated when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: "Android/media/com.whatsapp/WhatsApp/Media/.Statuses", removal: Contents, title: "WhatsApp statuses", reason: "Statuses you viewed, kept for a day.", category: Cache, safety: Safe },
+];
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 const HOME_RULES: &[HomeRule] = &[
     HomeRule { rel: ".local/share/Trash/files", removal: EmptyTrash, title: "Trash", reason: "Files in the Trash still take up space until it is emptied.", category: Trash, safety: Review },
 ];
