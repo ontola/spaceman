@@ -9,8 +9,9 @@ import '../widgets/selection_bar.dart';
 
 /// Drill-down view of where space is used, largest items first.
 ///
-/// Going up a level works like Finder: two-finger swipe right, the mouse
-/// back button, Cmd+[ or Cmd+Up.
+/// Folders slide like a navigation stack. Going up: swipe right (two
+/// fingers on a trackpad, one on a touch screen), the mouse back button,
+/// Cmd+[, Cmd+Up or Backspace.
 class ExplorerScreen extends StatefulWidget {
   const ExplorerScreen({super.key, required this.model});
 
@@ -22,116 +23,112 @@ class ExplorerScreen extends StatefulWidget {
 
 class _ExplorerScreenState extends State<ExplorerScreen>
     with SingleTickerProviderStateMixin {
-  /// Horizontal offset of the content, following the trackpad like Finder.
-  late final AnimationController _offset = AnimationController.unbounded(
-    vsync: this,
-  );
+  /// Progress of a transition between two folder lists, like a navigation
+  /// stack: 0 shows [_above] covering [_below], 1 has [_above] slid off to
+  /// the right with [_below] fully in view. Going up runs 0 -> 1, opening a
+  /// folder runs 1 -> 0 with the new folder on top.
+  late final AnimationController _t = AnimationController(vsync: this);
+  int? _below;
+  int? _above;
+
+  /// A back swipe is being dragged (the folder has not changed yet).
+  bool _dragging = false;
   double _width = 1;
-  bool _horizontal = false;
+
+  static const _duration = Duration(milliseconds: 280);
 
   AppModel get model => widget.model;
 
-  bool get _canGoUp => model.breadcrumbs(model.currentId).length > 1;
+  int? get _parentId {
+    final crumbs = model.breadcrumbs(model.currentId);
+    return crumbs.length > 1 ? crumbs[crumbs.length - 2].id : null;
+  }
 
   @override
   void dispose() {
-    _offset.dispose();
+    _t.dispose();
     super.dispose();
   }
 
-  /// Slides the current folder out to the right and the parent in.
-  Future<void> _up() async {
-    if (!_canGoUp) return;
-    await _offset.animateTo(
-      _width,
-      duration: const Duration(milliseconds: 140),
-      curve: Curves.easeIn,
-    );
+  void _clearTransition() {
     if (!mounted) return;
-    final crumbs = model.breadcrumbs(model.currentId);
-    if (crumbs.length > 1) model.open(crumbs[crumbs.length - 2].id);
-    _offset.value = -_width * 0.2;
-    await _offset.animateTo(
-      0,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
+    setState(() => _below = _above = null);
   }
 
-  void _onPanZoomStart(PointerPanZoomStartEvent e) {
-    _offset.stop();
-    _horizontal = false;
+  /// Opens [id], sliding lists the way a navigation stack would: deeper
+  /// folders come in from the right, going up slides the current one off.
+  /// The breadcrumbs change right away; only the list animates.
+  void _go(int id) {
+    if (id == model.currentId) return;
+    final from = model.currentId;
+    final deeper =
+        model.breadcrumbs(id).length > model.breadcrumbs(from).length;
+    _t.stop();
+    model.open(id);
+    setState(() {
+      _below = deeper ? from : id;
+      _above = deeper ? id : from;
+    });
+    _t.value = deeper ? 1 : 0;
+    _t
+        .animateTo(
+          deeper ? 0 : 1,
+          duration: _duration,
+          curve: Curves.easeOutCubic,
+        )
+        .whenComplete(_clearTransition);
   }
 
-  void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    // Decide once per gesture; vertical ones scroll the list.
-    if (!_horizontal) {
-      if (e.pan.distance < 8) return;
-      if (e.pan.dx.abs() < e.pan.dy.abs() * 1.5 || e.pan.dx < 0) return;
-      _horizontal = true;
-    }
-    final dx = e.pan.dx.clamp(0.0, _width);
+  void _up() {
+    final parent = _parentId;
+    if (parent != null) _go(parent);
+  }
+
+  // Back swipe: two fingers on a trackpad, or one finger on a touch screen.
+
+  void _dragStart(DragStartDetails d) {
+    _t.stop();
+    _dragging = true;
+    setState(() {
+      _below = _parentId;
+      _above = model.currentId;
+    });
+    _t.value = 0;
+  }
+
+  void _dragUpdate(DragUpdateDetails d) {
+    if (!_dragging) return;
     // At the top there is nowhere to go: resist like a rubber band.
-    _offset.value = _canGoUp ? dx : dx * 0.15;
+    final resist = _below == null ? 0.15 : 1.0;
+    _t.value = (_t.value + d.primaryDelta! * resist / _width).clamp(0.0, 1.0);
   }
 
-  void _onPanZoomEnd(PointerPanZoomEndEvent e) {
-    if (!_horizontal) return;
-    _horizontal = false;
-    if (_canGoUp && _offset.value > (_width * 0.25).clamp(60.0, 160.0)) {
-      _up();
+  void _dragEnd(DragEndDetails d) {
+    if (!_dragging) return;
+    _dragging = false;
+    final v = d.primaryVelocity ?? 0;
+    final target = _below;
+    if (target != null && (v > 600 || (_t.value > 0.35 && v > -300))) {
+      _t
+          .animateTo(
+            1,
+            duration: _duration * (1 - _t.value),
+            curve: Curves.easeOut,
+          )
+          .whenComplete(() {
+            if (!mounted) return;
+            model.open(target);
+            _clearTransition();
+          });
     } else {
-      _offset.animateTo(
-        0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-      );
+      _t
+          .animateBack(0, duration: _duration * _t.value, curve: Curves.easeOut)
+          .whenComplete(_clearTransition);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): _up,
-        const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
-        const SingleActivator(LogicalKeyboardKey.backspace): _up,
-      },
-      child: Focus(
-        autofocus: true,
-        child: Listener(
-          onPointerPanZoomStart: _onPanZoomStart,
-          onPointerPanZoomUpdate: _onPanZoomUpdate,
-          onPointerPanZoomEnd: _onPanZoomEnd,
-          onPointerDown: (e) {
-            if (e.buttons & kBackMouseButton != 0) _up();
-          },
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              _width = constraints.maxWidth;
-              return ClipRect(
-                child: AnimatedBuilder(
-                  animation: _offset,
-                  builder: (context, child) => Transform.translate(
-                    offset: Offset(_offset.value, 0),
-                    child: Opacity(
-                      opacity:
-                          1 -
-                          (_offset.value.abs() / _width).clamp(0.0, 1.0) * 0.7,
-                      child: child,
-                    ),
-                  ),
-                  child: _buildContent(context),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContent(BuildContext context) {
     if (model.rootNode == null) {
       return Center(
         child: Text(
@@ -144,6 +141,102 @@ class _ExplorerScreenState extends State<ExplorerScreen>
       );
     }
     final crumbs = model.breadcrumbs(model.currentId);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): _up,
+        const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
+        const SingleActivator(LogicalKeyboardKey.backspace): _up,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Listener(
+          onPointerDown: (e) {
+            if (e.buttons & kBackMouseButton != 0) _up();
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Breadcrumbs(model: model, crumbs: crumbs, onOpen: _go),
+              Expanded(
+                child: GestureDetector(
+                  // Only fingers swipe; mouse drags are left alone.
+                  supportedDevices: const {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.trackpad,
+                  },
+                  onHorizontalDragStart: _dragStart,
+                  onHorizontalDragUpdate: _dragUpdate,
+                  onHorizontalDragEnd: _dragEnd,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      _width = constraints.maxWidth;
+                      return ClipRect(child: _buildLists(context));
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLists(BuildContext context) {
+    final above = _above;
+    if (above == null) return _list(model.currentId);
+    final below = _below;
+    final background = Theme.of(context).colorScheme.surface;
+    return AnimatedBuilder(
+      animation: _t,
+      builder: (context, _) {
+        final t = _t.value;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (below != null)
+              // The folder underneath trails behind with a parallax shift
+              // and is dimmed while covered.
+              Transform.translate(
+                offset: Offset(-_width * 0.3 * (1 - t), 0),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _list(below),
+                    IgnorePointer(
+                      child: ColoredBox(
+                        color: Colors.black.withValues(alpha: 0.06 * (1 - t)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Transform.translate(
+              offset: Offset(_width * t, 0),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: background,
+                  boxShadow: [
+                    if (below != null && t > 0 && t < 1)
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(-4, 0),
+                      ),
+                  ],
+                ),
+                child: _list(above),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// The contents of folder [id]: its size and its items, largest first.
+  Widget _list(int id) {
+    final crumbs = model.breadcrumbs(id);
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
     final items = model
@@ -151,39 +244,42 @@ class _ExplorerScreenState extends State<ExplorerScreen>
         .where((n) => n.protection != ProtectionState.protected)
         .toList();
     final largest = items.isEmpty ? 1 : items.first.size;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Breadcrumbs(model: model, crumbs: crumbs),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text(
-            '${formatBytes(current.size)} in ${formatCount(current.fileCount)} files',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (context, i) => _NodeRow(
-              model: model,
-              node: items[i],
-              fraction: largest > 0 ? items[i].size / largest : 0,
-              share: current.size > 0 ? items[i].size / current.size : 0,
+    return ListView.builder(
+      key: PageStorageKey(id),
+      itemCount: items.length + 1,
+      itemBuilder: (context, i) {
+        if (i == 0) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              '${formatBytes(current.size)} in ${formatCount(current.fileCount)} files',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-          ),
-        ),
-      ],
+          );
+        }
+        final node = items[i - 1];
+        return _NodeRow(
+          model: model,
+          node: node,
+          fraction: largest > 0 ? node.size / largest : 0,
+          share: current.size > 0 ? node.size / current.size : 0,
+          onOpen: _go,
+        );
+      },
     );
   }
 }
 
 class _Breadcrumbs extends StatelessWidget {
-  const _Breadcrumbs({required this.model, required this.crumbs});
+  const _Breadcrumbs({
+    required this.model,
+    required this.crumbs,
+    required this.onOpen,
+  });
 
   final AppModel model;
   final List<NodeView> crumbs;
+  final ValueChanged<int> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -201,12 +297,12 @@ class _Breadcrumbs extends StatelessWidget {
               IconButton(
                 tooltip: 'Up',
                 icon: const Icon(Icons.arrow_upward),
-                onPressed: () => model.open(crumbs[crumbs.length - 2].id),
+                onPressed: () => onOpen(crumbs[crumbs.length - 2].id),
               ),
             for (final (i, c) in crumbs.indexed) ...[
               if (i > 0) const Icon(Icons.chevron_right, size: 18),
               TextButton(
-                onPressed: () => model.open(c.id),
+                onPressed: () => onOpen(c.id),
                 child: Text(i == 0 ? _short(c.name) : c.name),
               ),
             ],
@@ -229,10 +325,12 @@ class _NodeRow extends StatelessWidget {
     required this.node,
     required this.fraction,
     required this.share,
+    required this.onOpen,
   });
 
   final AppModel model;
   final NodeView node;
+  final ValueChanged<int> onOpen;
 
   /// Size relative to the largest sibling, for the bar.
   final double fraction;
@@ -253,7 +351,7 @@ class _NodeRow extends StatelessWidget {
         node.protection == ProtectionState.none;
 
     return ListTile(
-      onTap: node.hasChildren ? () => model.open(node.id) : null,
+      onTap: node.hasChildren ? () => onOpen(node.id) : null,
       leading: Icon(
         icon,
         color: node.kind == EntryKind.dir ? theme.colorScheme.primary : null,
