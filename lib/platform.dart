@@ -56,6 +56,63 @@ Future<void> requestAndroidStorageAccess() =>
 Future<String?> androidStorageRoot() =>
     _storage.invokeMethod<String>('storageRoot');
 
+/// Space used by one installed Android app.
+class AppSize {
+  AppSize.fromMap(Map<Object?, Object?> m)
+    : package = m['package']! as String,
+      label = m['label']! as String,
+      app = m['app']! as int,
+      data = m['data']! as int,
+      cache = m['cache']! as int,
+      system = m['system']! as bool;
+
+  final String package;
+  final String label;
+
+  /// The app itself (APKs, compiled code).
+  final int app;
+
+  /// Everything the app stores, including [cache].
+  final int data;
+  final int cache;
+
+  /// Came with the phone and was never updated.
+  final bool system;
+
+  int get total => app + data;
+}
+
+/// Installed apps and the totals of internal storage.
+typedef AppSizes = ({List<AppSize> apps, int total, int free});
+
+/// Whether Android lets SpaceMan read the size of other apps.
+Future<bool> hasUsageAccess() async =>
+    await _storage.invokeMethod<bool>('hasUsageAccess') ?? false;
+
+/// Opens the "Usage access" setting; check again when the app resumes.
+Future<void> requestUsageAccess() =>
+    _storage.invokeMethod<void>('requestUsageAccess');
+
+Future<AppSizes> appSizes() async {
+  final m = (await _storage.invokeMapMethod<String, Object?>('appSizes'))!;
+  return (
+    apps: [
+      for (final a in m['apps']! as List<Object?>)
+        AppSize.fromMap(a! as Map<Object?, Object?>),
+    ],
+    total: m['total'] as int? ?? 0,
+    free: m['free'] as int? ?? 0,
+  );
+}
+
+/// The system's App info page, where the user can clear cache and storage.
+Future<void> openAppInfo(String package) =>
+    _storage.invokeMethod<void>('openAppInfo', {'package': package});
+
+/// Asks the system to uninstall [package]; Android confirms with the user.
+Future<void> uninstallApp(String package) =>
+    _storage.invokeMethod<void>('uninstall', {'package': package});
+
 /// Opens the Full Disk Access pane of System Settings (macOS only).
 Future<void> openFullDiskAccessSettings() async {
   await Process.run('open', [

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- SpaceMan needs to see all files to tell where space goes, and to
          remove what the user picks. Android 11+ uses "All files access";
          older versions the classic storage permissions. -->
@@ -9,6 +10,16 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
+    <!-- Apps and their data are outside shared storage. Their sizes come
+         from StorageStatsManager, which needs "Usage access" and the list of
+         all installed apps. Uninstalling goes through the system dialog. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <application
         android:label="SpaceMan"
         android:requestLegacyExternalStorage="true"

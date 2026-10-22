@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:spaceman/src/rust/frb_generated.dart';
 
 import 'app_model.dart';
 import 'screens/access_intro.dart';
+import 'screens/apps.dart';
 import 'screens/cleanup.dart';
 import 'screens/explorer.dart';
 import 'screens/protected.dart';
@@ -52,7 +55,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _tab = 0;
 
-  static const _destinations = [
+  static final _destinations = [
     (
       icon: Icons.folder_open_outlined,
       active: Icons.folder_open,
@@ -64,6 +67,9 @@ class _HomePageState extends State<HomePage> {
       label: 'Clean up',
     ),
     (icon: Icons.lock_outline, active: Icons.lock, label: 'Do not touch'),
+    // Android keeps apps out of reach of the file scan; see AppsScreen.
+    if (Platform.isAndroid)
+      (icon: Icons.apps_outlined, active: Icons.apps, label: 'Apps'),
   ];
 
   @override
@@ -80,7 +86,8 @@ class _HomePageState extends State<HomePage> {
         final page = switch (_tab) {
           0 => ExplorerScreen(model: model),
           1 => CleanupScreen(model: model),
-          _ => ProtectedScreen(model: model),
+          2 => ProtectedScreen(model: model),
+          _ => AppsScreen(model: model),
         };
         final cleanupBadge = model.suggestions.isEmpty
             ? null

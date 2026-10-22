@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
@@ -222,12 +224,18 @@ class _NotScannedDialog extends StatelessWidget {
           children: [
             if (outside > 0)
               Text(
-                'The scan of $root found ${formatBytes(scanned)}. Another '
-                '${formatBytes(outside)} of the disk is in use outside it: '
-                'other folders, macOS itself, apps, other users, local '
-                'snapshots, and folders that could not be read. Their exact '
-                'size is unknown, because what can not be read can not be '
-                'measured.',
+                Platform.isAndroid
+                    ? 'The scan of $root found ${formatBytes(scanned)}. '
+                          'Another ${formatBytes(outside)} of the phone is in '
+                          'use outside it: mostly apps and their data, and '
+                          'Android itself. See the Apps tab for the size of '
+                          'each app.'
+                    : 'The scan of $root found ${formatBytes(scanned)}. '
+                          'Another ${formatBytes(outside)} of the disk is in '
+                          'use outside it: other folders, macOS itself, apps, '
+                          'other users, local snapshots, and folders that '
+                          'could not be read. Their exact size is unknown, '
+                          'because what can not be read can not be measured.',
                 style: theme.textTheme.bodyMedium,
               ),
             if (unreadable.isNotEmpty) ...[
