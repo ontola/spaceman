@@ -218,15 +218,21 @@ class RevealButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!canReveal) return const SizedBox.shrink();
-    return IconButton(
-      tooltip: 'Show in $fileManagerName',
-      icon: const Icon(Icons.open_in_new, size: 18),
-      onPressed: () => reveal(path),
+    return Tooltip(
+      message: 'Show in $fileManagerName',
+      child: InkResponse(
+        radius: 18,
+        onTap: () => reveal(path),
+        child: const SizedBox.square(
+          dimension: leadingSlot,
+          child: Icon(Icons.open_in_new, size: 18),
+        ),
+      ),
     );
   }
 }
 
-/// Lock in front of a row: marks the item as do not touch, or allows it
+/// Lock at the end of a row: marks the item as do not touch, or allows it
 /// again. Items inside a protected folder show the lock but can not be
 /// toggled on their own.
 class ProtectToggle extends StatelessWidget {
@@ -281,7 +287,7 @@ class ProtectToggle extends StatelessWidget {
   }
 }
 
-/// Size of each control in front of a row (lock, checkbox, icon), placed
+/// Size of each row control (lock, checkbox), placed
 /// [leadingGap] apart so the gaps look equal.
 const double leadingSlot = 24;
 const double leadingGap = 12;

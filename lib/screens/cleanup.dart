@@ -84,17 +84,6 @@ class _Section extends StatelessWidget {
           ListTile(
             onTap: () =>
                 model.setSelected(s.node, !model.isSelected(s.node.path)),
-            leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ProtectToggle(model: model, node: s.node),
-                const SizedBox(width: leadingGap),
-                RowCheckbox(
-                  value: model.isSelected(s.node.path),
-                  onChanged: (v) => model.setSelected(s.node, v ?? false),
-                ),
-              ],
-            ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -102,7 +91,15 @@ class _Section extends StatelessWidget {
                   formatBytes(s.node.size),
                   style: theme.textTheme.titleSmall,
                 ),
+                const SizedBox(width: leadingGap),
                 RevealButton(path: s.node.path),
+                const SizedBox(width: leadingGap),
+                ProtectToggle(model: model, node: s.node),
+                const SizedBox(width: leadingGap),
+                RowCheckbox(
+                  value: model.isSelected(s.node.path),
+                  onChanged: (v) => model.setSelected(s.node, v ?? false),
+                ),
               ],
             ),
             title: Text(s.title),

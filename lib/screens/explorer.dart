@@ -145,7 +145,11 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     }
     final crumbs = model.breadcrumbs(model.currentId);
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
-    final items = model.children(current.id);
+    // Protected items are out of the way: they live in the Do not touch tab.
+    final items = model
+        .children(current.id)
+        .where((n) => n.protection != ProtectionState.protected)
+        .toList();
     final largest = items.isEmpty ? 1 : items.first.size;
 
     return Column(
@@ -250,25 +254,9 @@ class _NodeRow extends StatelessWidget {
 
     return ListTile(
       onTap: node.hasChildren ? () => model.open(node.id) : null,
-      leading: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ProtectToggle(model: model, node: node),
-          const SizedBox(width: leadingGap),
-          RowCheckbox(
-            value: selectable && model.isSelected(node.path),
-            onChanged: selectable
-                ? (v) => model.setSelected(node, v ?? false)
-                : null,
-          ),
-          const SizedBox(width: leadingGap),
-          Icon(
-            icon,
-            color: node.kind == EntryKind.dir
-                ? theme.colorScheme.primary
-                : null,
-          ),
-        ],
+      leading: Icon(
+        icon,
+        color: node.kind == EntryKind.dir ? theme.colorScheme.primary : null,
       ),
       title: Row(
         children: [
@@ -314,7 +302,17 @@ class _NodeRow extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: leadingGap),
           RevealButton(path: node.path),
+          const SizedBox(width: leadingGap),
+          ProtectToggle(model: model, node: node),
+          const SizedBox(width: leadingGap),
+          RowCheckbox(
+            value: selectable && model.isSelected(node.path),
+            onChanged: selectable
+                ? (v) => model.setSelected(node, v ?? false)
+                : null,
+          ),
         ],
       ),
     );
