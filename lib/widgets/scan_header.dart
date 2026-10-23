@@ -7,13 +7,17 @@ import '../app_model.dart';
 import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
+import 'help.dart';
 import 'selection_bar.dart';
 
 /// Top bar: which folder is scanned, disk usage and scan controls.
 class ScanHeader extends StatelessWidget {
-  const ScanHeader({super.key, required this.model});
+  const ScanHeader({super.key, required this.model, this.showHelp = false});
 
   final AppModel model;
+
+  /// Narrow layouts have no sidebar to carry the help button.
+  final bool showHelp;
 
   Future<void> _pickFolder() async {
     final path = await getDirectoryPath(initialDirectory: model.root);
@@ -65,6 +69,7 @@ class ScanHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (showHelp) const HelpButton(),
               if (canPickFolder)
                 IconButton(
                   tooltip: 'Choose folder',

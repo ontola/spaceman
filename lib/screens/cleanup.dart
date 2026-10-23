@@ -31,7 +31,7 @@ class CleanupScreen extends StatelessWidget {
         suggestions.where((s) => categories.contains(s.category)).toList();
     final home = homeDir();
 
-    // Backspace or Delete ticks the item under the pointer for removal.
+    // Space, Backspace or Delete ticks the item under the pointer.
     void toggleHovered() {
       final node = _hovered;
       if (node == null) return;
@@ -53,6 +53,7 @@ class CleanupScreen extends StatelessWidget {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.backspace): toggleHovered,
         const SingleActivator(LogicalKeyboardKey.delete): toggleHovered,
+        const SingleActivator(LogicalKeyboardKey.space): toggleHovered,
         const SingleActivator(LogicalKeyboardKey.backspace, meta: true):
             toggleHovered,
       },

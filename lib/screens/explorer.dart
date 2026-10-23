@@ -15,8 +15,9 @@ import '../widgets/treemap.dart';
 /// Cmd+[, Cmd+Up, Alt+Up, Alt+Left, or Left in the list.
 ///
 /// The keyboard moves a focus ring (arrows), opens folders (Enter, or Right
-/// in the list) and ticks items for removal (Backspace or Delete); without
-/// a focused item those keys act on the one under the pointer.
+/// in the list) and ticks items for removal (Backspace or Delete; without
+/// a focused item they act on the one under the pointer). Space ticks the
+/// item under the pointer, or else the focused one.
 class ExplorerScreen extends StatefulWidget {
   const ExplorerScreen({super.key, required this.model});
 
@@ -113,9 +114,9 @@ class _ExplorerScreenState extends State<ExplorerScreen>
 
   /// Backspace or Delete: tick or untick the focused (or hovered) item for
   /// removal. In the list, focus then moves on, for quick multi-select.
-  void _toggleRemoval() {
+  void _toggleRemoval({bool pointerFirst = false}) {
     final focused = _focused;
-    final node = focused ?? _hovered;
+    final node = pointerFirst ? _hovered ?? focused : focused ?? _hovered;
     if (node == null) return;
     String? hint;
     if (model.live) {
@@ -136,7 +137,7 @@ class _ExplorerScreenState extends State<ExplorerScreen>
       return;
     }
     model.setSelected(node, !model.isSelected(node.path));
-    if (focused != null && !model.treemap) _arrow(AxisDirection.down);
+    if (node == focused && !model.treemap) _arrow(AxisDirection.down);
   }
 
   int? get _parentId {
@@ -322,6 +323,9 @@ class _ExplorerScreenState extends State<ExplorerScreen>
         const SingleActivator(LogicalKeyboardKey.enter): _openFocused,
         const SingleActivator(LogicalKeyboardKey.backspace): _toggleRemoval,
         const SingleActivator(LogicalKeyboardKey.delete): _toggleRemoval,
+        // Space works on what the mouse points at, then the focus.
+        const SingleActivator(LogicalKeyboardKey.space): () =>
+            _toggleRemoval(pointerFirst: true),
         const SingleActivator(LogicalKeyboardKey.backspace, meta: true):
             _toggleRemoval,
       },
