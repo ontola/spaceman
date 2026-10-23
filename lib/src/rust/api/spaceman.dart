@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `check_deletable`, `home`, `previous_scan`, `remove_from_disk`, `remove_permanently`, `save_cache`, `view`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `State`
+// These functions are ignored because they are not marked as `pub`: `check_deletable`, `delete_inner`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `save_cache`, `shown`, `to_view`, `view`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Live`, `Progress`, `State`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 /// Loads settings (the protect list) from `config_dir`, and keeps scan
@@ -98,6 +98,70 @@ Future<DeleteReport> deletePaths({
   permanent: permanent,
 );
 
+/// Like [`delete_paths`], streaming progress about ten times a second. The
+/// last update carries the report. [`cancel_delete`] stops after the file
+/// being removed; what is gone by then stays gone.
+Stream<DeleteProgress> deletePathsWithProgress({
+  required List<String> paths,
+  required bool permanent,
+}) => RustLib.instance.api.crateApiSpacemanDeletePathsWithProgress(
+  paths: paths,
+  permanent: permanent,
+);
+
+/// Stops a running [`delete_paths_with_progress`].
+void cancelDelete() => RustLib.instance.api.crateApiSpacemanCancelDelete();
+
+/// How far a removal is. The last one carries the report.
+class DeleteProgress {
+  /// Items of the selection handled so far, and in total.
+  final PlatformInt64 done;
+  final PlatformInt64 total;
+  final PlatformInt64 freed;
+
+  /// Files removed so far and the files in the selection, as far as the
+  /// scan knows; moves the bar within one big folder.
+  final PlatformInt64 filesDone;
+  final PlatformInt64 filesTotal;
+
+  /// What is being removed now.
+  final String current;
+  final DeleteReport? report;
+
+  const DeleteProgress({
+    required this.done,
+    required this.total,
+    required this.freed,
+    required this.filesDone,
+    required this.filesTotal,
+    required this.current,
+    this.report,
+  });
+
+  @override
+  int get hashCode =>
+      done.hashCode ^
+      total.hashCode ^
+      freed.hashCode ^
+      filesDone.hashCode ^
+      filesTotal.hashCode ^
+      current.hashCode ^
+      report.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DeleteProgress &&
+          runtimeType == other.runtimeType &&
+          done == other.done &&
+          total == other.total &&
+          freed == other.freed &&
+          filesDone == other.filesDone &&
+          filesTotal == other.filesTotal &&
+          current == other.current &&
+          report == other.report;
+}
+
 class DeleteReport {
   final List<String> deleted;
   final PlatformInt64 freed;
@@ -181,6 +245,10 @@ class NodeView {
   final ProtectionState protection;
   final bool hasChildren;
 
+  /// Still being scanned: the size is still growing and the contents are
+  /// not known yet.
+  final bool scanning;
+
   const NodeView({
     required this.id,
     required this.name,
@@ -191,6 +259,7 @@ class NodeView {
     required this.modified,
     required this.protection,
     required this.hasChildren,
+    required this.scanning,
   });
 
   @override
@@ -203,7 +272,8 @@ class NodeView {
       kind.hashCode ^
       modified.hashCode ^
       protection.hashCode ^
-      hasChildren.hashCode;
+      hasChildren.hashCode ^
+      scanning.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -218,7 +288,8 @@ class NodeView {
           kind == other.kind &&
           modified == other.modified &&
           protection == other.protection &&
-          hasChildren == other.hasChildren;
+          hasChildren == other.hasChildren &&
+          scanning == other.scanning;
 }
 
 enum ProtectionState { none, protected, containsProtected }
@@ -249,6 +320,9 @@ class ScanUpdate {
   /// Set when the scan failed.
   final String? error;
 
+  /// A new view of the scan so far is available: refetch what is shown.
+  final bool live;
+
   const ScanUpdate({
     required this.files,
     required this.dirs,
@@ -258,6 +332,7 @@ class ScanUpdate {
     required this.done,
     required this.partial,
     this.error,
+    required this.live,
   });
 
   @override
@@ -269,7 +344,8 @@ class ScanUpdate {
       elapsedMs.hashCode ^
       done.hashCode ^
       partial.hashCode ^
-      error.hashCode;
+      error.hashCode ^
+      live.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -283,7 +359,8 @@ class ScanUpdate {
           elapsedMs == other.elapsedMs &&
           done == other.done &&
           partial == other.partial &&
-          error == other.error;
+          error == other.error &&
+          live == other.live;
 }
 
 enum SuggestionCategory {

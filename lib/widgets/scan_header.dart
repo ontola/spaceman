@@ -7,17 +7,17 @@ import '../app_model.dart';
 import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
-import 'logo.dart';
+import 'help.dart';
 import 'selection_bar.dart';
 
 /// Top bar: which folder is scanned, disk usage and scan controls.
 class ScanHeader extends StatelessWidget {
-  const ScanHeader({super.key, required this.model, this.showLogo = false});
+  const ScanHeader({super.key, required this.model, this.showHelp = false});
 
   final AppModel model;
 
-  /// Narrow layouts have no navigation rail to carry the logo.
-  final bool showLogo;
+  /// Narrow layouts have no sidebar to carry the help button.
+  final bool showHelp;
 
   Future<void> _pickFolder() async {
     final path = await getDirectoryPath(initialDirectory: model.root);
@@ -36,60 +36,45 @@ class ScanHeader extends StatelessWidget {
     } else if (model.scanning) {
       status = p == null
           ? 'Starting scan...'
-          : 'Scanning: ${formatCount(p.files)} files, ${formatBytes(p.bytes)}';
+          : 'Scanning · ${formatCompact(p.files)} files · ${formatBytes(p.bytes)}';
     } else if (model.lastError != null) {
       status = model.lastError!;
     } else if (p != null && p.done && p.partial) {
-      status =
-          'Scan stopped after ${formatCount(p.files)} files. '
-          'Rescan to complete it.';
+      status = 'Stopped after ${formatCompact(p.files)} files';
     } else if (p != null && p.done) {
       status =
-          'Scanned ${formatCount(p.files)} files in ${(p.elapsedMs / 1000).toStringAsFixed(1)} s';
+          '${formatCompact(p.files)} files · ${(p.elapsedMs / 1000).toStringAsFixed(1)} s';
     } else if (model.scannedAt != null) {
-      status = 'From cache, scanned ${formatAgo(model.scannedAt!)}';
+      status = 'Scanned ${formatAgo(model.scannedAt!)}';
     } else {
       status = '';
     }
 
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: model.lastError != null
+          ? theme.colorScheme.error
+          : theme.colorScheme.onSurfaceVariant,
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              if (showLogo) ...[
-                const SpaceManLogo(size: 40),
-                const SizedBox(width: 12),
-              ],
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      model.root,
-                      style: theme.textTheme.titleMedium,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (status.isNotEmpty)
-                      Text(
-                        status,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: model.lastError != null
-                              ? theme.colorScheme.error
-                              : theme.colorScheme.onSurfaceVariant,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
+                child: Text(
+                  model.root,
+                  style: theme.textTheme.titleMedium,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (showHelp) const HelpButton(),
               if (canPickFolder)
                 IconButton(
                   tooltip: 'Choose folder',
                   onPressed: _pickFolder,
-                  icon: const Icon(Icons.drive_folder_upload_outlined),
+                  icon: const Icon(Icons.folder_open_outlined),
                 ),
               if (model.scanning)
                 IconButton(
@@ -118,36 +103,86 @@ class ScanHeader extends StatelessWidget {
                 ),
             ],
           ),
-          if (!model.scanning) _NotScanned(model: model),
-          if (model.access == DiskAccess.limited)
-            Row(
+          // One quiet line: how the scan went, what it missed, and access.
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
               children: [
                 Flexible(
                   child: Text(
-                    'Desktop, Documents and other protected folders are skipped.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    status,
+                    style: muted,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 8),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: theme.textTheme.bodySmall,
+                if (!model.scanning) _NotScanned(model: model, style: muted),
+                if (model.access == DiskAccess.limited) ...[
+                  const SizedBox(width: 8),
+                  _Chip(
+                    icon: Icons.shield_outlined,
+                    label: 'Full Disk Access',
+                    tooltip:
+                        'Desktop, Documents and other protected folders are '
+                        'skipped. Click to grant access.',
+                    onTap: model.showAccessIntro,
                   ),
-                  onPressed: model.showAccessIntro,
-                  child: const Text('Grant Full Disk Access'),
-                ),
+                ],
               ],
             ),
+          ),
           const SizedBox(height: 8),
-          if (model.scanning)
-            const LinearProgressIndicator()
-          else if (disk != null && disk.total > 0)
-            _DiskBar(total: disk.total, free: disk.free),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: model.scanning
+                ? const LinearProgressIndicator()
+                : disk != null && disk.total > 0
+                ? _DiskBar(total: disk.total, free: disk.free)
+                : const SizedBox.shrink(),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// A small tappable label with an icon, for the status line.
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: theme.colorScheme.primary),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -156,9 +191,10 @@ class ScanHeader extends StatelessWidget {
 /// What the scan could not count: unreadable folders, and disk space in
 /// use that is not in the scanned folder at all.
 class _NotScanned extends StatelessWidget {
-  const _NotScanned({required this.model});
+  const _NotScanned({required this.model, required this.style});
 
   final AppModel model;
+  final TextStyle? style;
 
   @override
   Widget build(BuildContext context) {
@@ -171,35 +207,29 @@ class _NotScanned extends StatelessWidget {
     final showOutside = outside > 1024 * 1024 * 1024;
     if (unreadable.isEmpty && !showOutside) return const SizedBox.shrink();
 
-    final parts = [
-      if (showOutside) '${formatBytes(outside)} of used disk space not scanned',
-      if (unreadable.isNotEmpty)
-        '${unreadable.length >= 200 ? '200+' : unreadable.length} '
-            'folder${unreadable.length == 1 ? '' : 's'} not readable',
-    ];
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(4),
-        onTap: () => showDialog<void>(
-          context: context,
-          builder: (context) => _NotScannedDialog(
-            root: model.root,
-            scanned: root.size,
-            outside: showOutside ? outside : 0,
-            unreadable: unreadable,
-          ),
+    final label = showOutside
+        ? '${formatBytes(outside)} not scanned'
+        : '${unreadable.length >= 200 ? '200+' : unreadable.length} '
+              'unreadable';
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (context) => _NotScannedDialog(
+          root: model.root,
+          scanned: root.size,
+          outside: showOutside ? outside : 0,
+          unreadable: unreadable,
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Text(
-            parts.join(' · '),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              decoration: TextDecoration.underline,
-              decorationStyle: TextDecorationStyle.dotted,
-            ),
-          ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(' · $label ', style: style),
+            Icon(Icons.info_outline, size: 13, color: style?.color),
+          ],
         ),
       ),
     );
@@ -306,9 +336,12 @@ class _DiskBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          '${formatBytes(free)} free of ${formatBytes(total)}',
-          style: theme.textTheme.bodySmall,
+        Tooltip(
+          message: '${formatBytes(total - free)} used of ${formatBytes(total)}',
+          child: Text(
+            '${formatBytes(free)} free',
+            style: theme.textTheme.bodySmall,
+          ),
         ),
       ],
     );

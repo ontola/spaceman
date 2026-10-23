@@ -12,7 +12,12 @@ import '../widgets/treemap.dart';
 ///
 /// Folders slide like a navigation stack. Going up: swipe right (two
 /// fingers on a trackpad, one on a touch screen), the mouse back button,
-/// Cmd+[, Cmd+Up, Alt+Up, Alt+Left or Backspace.
+/// Cmd+[, Cmd+Up, Alt+Up, Alt+Left, or Left in the list.
+///
+/// The keyboard moves a focus ring (arrows), opens folders (Enter, or Right
+/// in the list) and ticks items for removal (Backspace or Delete; without
+/// a focused item they act on the one under the pointer). Space ticks the
+/// item under the pointer, or else the focused one.
 class ExplorerScreen extends StatefulWidget {
   const ExplorerScreen({super.key, required this.model});
 
@@ -40,6 +45,101 @@ class _ExplorerScreenState extends State<ExplorerScreen>
 
   AppModel get model => widget.model;
 
+  /// Item with keyboard focus, by path so it survives re-sorting and the
+  /// live view of a scan being replaced.
+  String? _focusPath;
+  final _focusKey = GlobalKey();
+  final _treemapKey = GlobalKey<TreemapState>();
+
+  /// Item under the pointer, the fallback for the keyboard.
+  NodeView? _hovered;
+
+  /// What the list shows for folder [id].
+  List<NodeView> _items(int id) => model
+      .children(id)
+      .where((n) => n.protection != ProtectionState.protected)
+      .toList();
+
+  NodeView? get _focused => _focusPath == null
+      ? null
+      : _items(model.currentId).where((n) => n.path == _focusPath).firstOrNull;
+
+  void _focus(NodeView? node, {bool down = true}) {
+    if (node == null) return;
+    setState(() => _focusPath = node.path);
+    // Keep the ring in view while stepping through a long list.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _focusKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 120),
+          alignmentPolicy: down
+              ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+              : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        );
+      }
+    });
+  }
+
+  /// Arrow keys: up and down in the list, by position in the treemap.
+  void _arrow(AxisDirection d) {
+    if (model.treemap) {
+      _focus(_treemapKey.currentState?.neighbor(_focusPath, d));
+      return;
+    }
+    switch (d) {
+      case AxisDirection.left:
+        _up();
+      case AxisDirection.right:
+        _openFocused();
+      case AxisDirection.up || AxisDirection.down:
+        final items = _items(model.currentId);
+        if (items.isEmpty) return;
+        final down = d == AxisDirection.down;
+        final i = items.indexWhere((n) => n.path == _focusPath);
+        final next = i < 0
+            ? (down ? 0 : items.length - 1)
+            : (i + (down ? 1 : -1)).clamp(0, items.length - 1);
+        _focus(items[next], down: down);
+    }
+  }
+
+  void _openFocused() {
+    final node = _focused ?? _hovered;
+    if (node != null && node.kind == EntryKind.dir && node.hasChildren) {
+      _go(node.id);
+    }
+  }
+
+  /// Backspace or Delete: tick or untick the focused (or hovered) item for
+  /// removal. In the list, focus then moves on, for quick multi-select.
+  void _toggleRemoval({bool pointerFirst = false}) {
+    final focused = _focused;
+    final node = pointerFirst ? _hovered ?? focused : focused ?? _hovered;
+    if (node == null) return;
+    String? hint;
+    if (model.live) {
+      hint = 'Wait until the scan is done to select items for removal.';
+    } else if (node.protection != ProtectionState.none) {
+      hint = node.protection == ProtectionState.protected
+          ? '${node.name} is marked do not touch.'
+          : '${node.name} contains items marked do not touch.';
+    } else if (node.kind == EntryKind.smallFiles) {
+      hint = 'Small files can only be removed with their folder.';
+    }
+    if (hint != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(hint), duration: const Duration(seconds: 2)),
+        );
+      return;
+    }
+    model.setSelected(node, !model.isSelected(node.path));
+    if (node == focused && !model.treemap) _arrow(AxisDirection.down);
+  }
+
   int? get _parentId {
     final crumbs = model.breadcrumbs(model.currentId);
     return crumbs.length > 1 ? crumbs[crumbs.length - 2].id : null;
@@ -62,6 +162,11 @@ class _ExplorerScreenState extends State<ExplorerScreen>
   void _go(int id) {
     if (id == model.currentId) return;
     final from = model.currentId;
+    // Going up, the folder we came out of keeps the focus.
+    final fromCrumbs = model.breadcrumbs(from);
+    _focusPath = fromCrumbs.length > model.breadcrumbs(id).length
+        ? fromCrumbs[model.breadcrumbs(id).length].path
+        : null;
     final deeper =
         model.breadcrumbs(id).length > model.breadcrumbs(from).length;
     _t.stop();
@@ -207,7 +312,22 @@ class _ExplorerScreenState extends State<ExplorerScreen>
         // Explorer's shortcuts on Windows and Linux.
         const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): _up,
         const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): _up,
-        const SingleActivator(LogicalKeyboardKey.backspace): _up,
+        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+            _arrow(AxisDirection.up),
+        const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+            _arrow(AxisDirection.down),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+            _arrow(AxisDirection.left),
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+            _arrow(AxisDirection.right),
+        const SingleActivator(LogicalKeyboardKey.enter): _openFocused,
+        const SingleActivator(LogicalKeyboardKey.backspace): _toggleRemoval,
+        const SingleActivator(LogicalKeyboardKey.delete): _toggleRemoval,
+        // Space works on what the mouse points at, then the focus.
+        const SingleActivator(LogicalKeyboardKey.space): () =>
+            _toggleRemoval(pointerFirst: true),
+        const SingleActivator(LogicalKeyboardKey.backspace, meta: true):
+            _toggleRemoval,
       },
       child: Focus(
         autofocus: true,
@@ -387,20 +507,20 @@ class _ExplorerScreenState extends State<ExplorerScreen>
   /// The contents of folder [id]: its size and its items, largest first.
   Widget _list(int id) {
     if (model.treemap) {
+      final current = id == model.currentId && _above == null;
       return Treemap(
-        key: ValueKey(('treemap', id)),
+        key: current ? _treemapKey : ValueKey(('treemap', id)),
         model: model,
         folderId: id,
         onOpen: _go,
+        focusPath: current ? _focusPath : null,
+        onHover: (n) => _hovered = n,
       );
     }
     final crumbs = model.breadcrumbs(id);
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
-    final items = model
-        .children(current.id)
-        .where((n) => n.protection != ProtectionState.protected)
-        .toList();
+    final items = _items(current.id);
     final largest = items.isEmpty ? 1 : items.first.size;
     return ListView.builder(
       key: PageStorageKey(id),
@@ -416,12 +536,21 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           );
         }
         final node = items[i - 1];
-        return _NodeRow(
-          model: model,
-          node: node,
-          fraction: largest > 0 ? node.size / largest : 0,
-          share: current.size > 0 ? node.size / current.size : 0,
-          onOpen: _go,
+        final focused = id == model.currentId && node.path == _focusPath;
+        return MouseRegion(
+          onEnter: (_) => _hovered = node,
+          onExit: (_) {
+            if (_hovered?.path == node.path) _hovered = null;
+          },
+          child: _NodeRow(
+            key: focused ? _focusKey : null,
+            model: model,
+            node: node,
+            fraction: largest > 0 ? node.size / largest : 0,
+            share: current.size > 0 ? node.size / current.size : 0,
+            onOpen: _go,
+            focused: focused,
+          ),
         );
       },
     );
@@ -473,16 +602,21 @@ class _Breadcrumbs extends StatelessWidget {
 
 class _NodeRow extends StatelessWidget {
   const _NodeRow({
+    super.key,
     required this.model,
     required this.node,
     required this.fraction,
     required this.share,
     required this.onOpen,
+    this.focused = false,
   });
 
   final AppModel model;
   final NodeView node;
   final ValueChanged<int> onOpen;
+
+  /// Has the keyboard focus ring.
+  final bool focused;
 
   /// Size relative to the largest sibling, for the bar.
   final double fraction;
@@ -498,12 +632,21 @@ class _NodeRow extends StatelessWidget {
       EntryKind.file => Icons.insert_drive_file_outlined,
       EntryKind.smallFiles => Icons.layers_outlined,
     };
+    // While the scan runs, folders are not fully known yet; removing
+    // waits until it is done.
     final selectable =
+        !model.live &&
         node.kind != EntryKind.smallFiles &&
         node.protection == ProtectionState.none;
 
     return ListTile(
       onTap: node.hasChildren ? () => onOpen(node.id) : null,
+      shape: focused
+          ? RoundedRectangleBorder(
+              side: BorderSide(color: theme.colorScheme.primary, width: 2),
+              borderRadius: BorderRadius.circular(8),
+            )
+          : null,
       leading: Icon(
         icon,
         color: node.kind == EntryKind.dir ? theme.colorScheme.primary : null,
@@ -511,6 +654,19 @@ class _NodeRow extends StatelessWidget {
       title: Row(
         children: [
           Flexible(child: Text(node.name, overflow: TextOverflow.ellipsis)),
+          if (node.scanning) ...[
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Still scanning',
+              child: SizedBox.square(
+                dimension: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
           if (node.protection == ProtectionState.containsProtected) ...[
             const SizedBox(width: 6),
             Tooltip(

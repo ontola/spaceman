@@ -5,12 +5,14 @@ import 'package:spaceman/src/rust/frb_generated.dart';
 
 import 'app_model.dart';
 import 'palette.dart';
+import 'platform.dart';
 import 'screens/access_intro.dart';
 import 'screens/apps.dart';
 import 'screens/cleanup.dart';
 import 'screens/explorer.dart';
 import 'screens/protected.dart';
 import 'widgets/fly_to.dart';
+import 'widgets/help.dart';
 import 'widgets/logo.dart';
 import 'widgets/scan_header.dart';
 import 'widgets/selection_bar.dart';
@@ -94,61 +96,29 @@ class _HomePageState extends State<HomePage> {
             ? null
             : '${model.suggestions.length}';
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 720;
-            final body = Column(
-              children: [
-                ScanHeader(model: model, showLogo: !wide),
-                const Divider(height: 1),
-                Expanded(child: page),
-                if (_tab < 2) SelectionBar(model: model),
-              ],
-            );
-            if (!wide) {
-              return Scaffold(
-                body: SafeArea(child: body),
-                bottomNavigationBar: NavigationBar(
-                  selectedIndex: _tab,
-                  onDestinationSelected: (i) => setState(() => _tab = i),
-                  destinations: [
-                    for (final (i, d) in _destinations.indexed)
-                      NavigationDestination(
-                        icon: _badge(
-                          i == 2
-                              ? KeyedSubtree(
-                                  key: doNotTouchTarget,
-                                  child: Icon(d.icon),
-                                )
-                              : Icon(d.icon),
-                          i == 1 ? cleanupBadge : null,
-                        ),
-                        selectedIcon: i == 2
-                            ? KeyedSubtree(
-                                key: doNotTouchTarget,
-                                child: Icon(d.active),
-                              )
-                            : Icon(d.active),
-                        label: d.label,
-                      ),
-                  ],
-                ),
-              );
-            }
-            return Scaffold(
-              body: Row(
+        // "?" opens the help from anywhere.
+        return CallbackShortcuts(
+          bindings: {const CharacterActivator('?'): () => showHelp(context)},
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 720;
+              final body = Column(
                 children: [
-                  NavigationRail(
+                  ScanHeader(model: model, showHelp: !wide),
+                  const Divider(height: 1),
+                  Expanded(child: page),
+                  if (_tab < 2) SelectionBar(model: model),
+                ],
+              );
+              if (!wide) {
+                return Scaffold(
+                  body: SafeArea(child: body),
+                  bottomNavigationBar: NavigationBar(
                     selectedIndex: _tab,
                     onDestinationSelected: (i) => setState(() => _tab = i),
-                    labelType: NavigationRailLabelType.all,
-                    leading: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: SpaceManLogo(size: 48),
-                    ),
                     destinations: [
                       for (final (i, d) in _destinations.indexed)
-                        NavigationRailDestination(
+                        NavigationDestination(
                           icon: _badge(
                             i == 2
                                 ? KeyedSubtree(
@@ -164,16 +134,71 @@ class _HomePageState extends State<HomePage> {
                                   child: Icon(d.active),
                                 )
                               : Icon(d.active),
-                          label: Text(d.label),
+                          label: d.label,
                         ),
                     ],
                   ),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: SafeArea(child: body)),
-                ],
-              ),
-            );
-          },
+                );
+              }
+              return Scaffold(
+                body: Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: _tab,
+                      onDestinationSelected: (i) => setState(() => _tab = i),
+                      labelType: NavigationRailLabelType.all,
+                      // The logo sits flush at the bottom, out of the way of
+                      // the tabs.
+                      trailing: Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            const HelpButton(),
+                            const SizedBox(height: 8),
+                            canOpenUrl
+                                ? Tooltip(
+                                    message: 'SpaceMan website',
+                                    child: MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      child: GestureDetector(
+                                        onTap: () => openUrl(websiteUrl),
+                                        child: const SpaceManLogo(size: 40),
+                                      ),
+                                    ),
+                                  )
+                                : const SpaceManLogo(size: 40),
+                          ],
+                        ),
+                      ),
+                      destinations: [
+                        for (final (i, d) in _destinations.indexed)
+                          NavigationRailDestination(
+                            icon: _badge(
+                              i == 2
+                                  ? KeyedSubtree(
+                                      key: doNotTouchTarget,
+                                      child: Icon(d.icon),
+                                    )
+                                  : Icon(d.icon),
+                              i == 1 ? cleanupBadge : null,
+                            ),
+                            selectedIcon: i == 2
+                                ? KeyedSubtree(
+                                    key: doNotTouchTarget,
+                                    child: Icon(d.active),
+                                  )
+                                : Icon(d.active),
+                            label: Text(d.label),
+                          ),
+                      ],
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: SafeArea(child: body)),
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );

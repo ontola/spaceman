@@ -112,6 +112,78 @@ class _SelectionBarState extends State<SelectionBar> {
   }
 }
 
+class _DeleteProgressDialog extends StatefulWidget {
+  const _DeleteProgressDialog({required this.progress, required this.toTrash});
+
+  final ValueNotifier<DeleteProgress?> progress;
+  final bool toTrash;
+
+  @override
+  State<_DeleteProgressDialog> createState() => _DeleteProgressDialogState();
+}
+
+class _DeleteProgressDialogState extends State<_DeleteProgressDialog> {
+  bool _stopping = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<DeleteProgress?>(
+      valueListenable: widget.progress,
+      builder: (context, p, _) {
+        // By files when the scan knows them, so one big folder moves the
+        // bar too; otherwise by items.
+        final double? value = p == null
+            ? null
+            : p.filesTotal > 0
+            ? (p.filesDone / p.filesTotal).clamp(0.0, 1.0)
+            : p.total > 0
+            ? p.done / p.total
+            : null;
+        final verb = widget.toTrash ? 'Moving' : 'Deleting';
+        return AlertDialog(
+          title: Text(
+            p == null
+                ? '$verb...'
+                : '$verb ${p.done} of ${p.total} · '
+                      '${formatBytes(p.freed)} freed',
+          ),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LinearProgressIndicator(value: value),
+                const SizedBox(height: 12),
+                Text(
+                  _stopping ? 'Stopping after this file...' : p?.current ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _stopping
+                  ? null
+                  : () {
+                      setState(() => _stopping = true);
+                      cancelDelete();
+                    },
+              child: const Text('Stop'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Asks for confirmation, removes the selection and reports the result.
 /// With [permanent] (or without a trash) nothing can be restored.
 Future<void> _confirmAndDelete(
@@ -158,7 +230,29 @@ Future<void> _confirmAndDelete(
   );
   if (ok != true || !context.mounted) return;
 
-  final report = await model.deleteSelection(permanent: permanent);
+  // Removing can take a while (big folders, permanently): show how far it
+  // is and keep everything else out of reach meanwhile.
+  final progress = ValueNotifier<DeleteProgress?>(null);
+  final dialog = showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => PopScope(
+      canPop: false,
+      child: _DeleteProgressDialog(progress: progress, toTrash: toTrash),
+    ),
+  );
+  final DeleteReport report;
+  try {
+    report = await model.deleteSelection(
+      permanent: permanent,
+      onProgress: (p) => progress.value = p,
+    );
+  } finally {
+    // Never leave the blocking dialog up, whatever happened.
+    if (context.mounted) Navigator.of(context).pop();
+    await dialog;
+    progress.dispose();
+  }
   if (!context.mounted) return;
   final messenger = ScaffoldMessenger.of(context);
   if (report.failed.isEmpty) {

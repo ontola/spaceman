@@ -21,6 +21,15 @@ String formatCount(int n) {
   return out.toString();
 }
 
+/// Short counts for tight spaces: 950, 12K, 8.3M.
+String formatCompact(int n) {
+  if (n < 1000) return '$n';
+  if (n < 1000000) {
+    return '${(n / 1000).toStringAsFixed(n < 10000 ? 1 : 0)}K';
+  }
+  return '${(n / 1000000).toStringAsFixed(n < 10000000 ? 1 : 0)}M';
+}
+
 /// "3 minutes ago" style description of a Unix timestamp in seconds.
 String formatAgo(int unixSeconds, {DateTime? now}) {
   final then = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000);
