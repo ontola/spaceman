@@ -83,7 +83,25 @@ grant SpaceMan *Full Disk Access* in System Settings > Privacy & Security.
 folder next to it. No permissions are needed. Removed items go to the Recycle
 Bin. Files in OneDrive that are only in the cloud count as taking no space.
 
-CI publishes unsigned zips for both platforms as the `dev` prerelease.
+CI publishes unsigned macOS and Windows zips as the `dev` prerelease.
+
+### Android notes
+
+SpaceMan scans shared storage (`/storage/emulated/0`) and needs *All files
+access* (`MANAGE_EXTERNAL_STORAGE`) for that; the app asks on first start.
+Android has no trash for apps, so removing deletes permanently. Other apps'
+private data (`Android/data`) stays out of reach, even with that permission.
+Google Play only allows this permission for file managers and the like, so
+for now the APK is installed directly.
+
+```sh
+flutter run -d <device>                    # needs the Android SDK and NDK
+flutter build apk --target-platform android-arm64
+```
+
+CI publishes `SpaceMan-Android.apk` with every development build. It is
+signed with CI's throwaway debug key, so uninstall the previous build before
+installing a new one.
 
 ## Ideas
 

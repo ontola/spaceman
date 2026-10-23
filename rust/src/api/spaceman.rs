@@ -496,6 +496,15 @@ fn remove_permanently(path: &Path) -> anyhow::Result<()> {
 }
 
 fn home() -> Option<PathBuf> {
+    // Apps on Android have no home folder; shared storage is what the user
+    // thinks of as "the phone".
+    if cfg!(target_os = "android") {
+        return Some(
+            std::env::var_os("EXTERNAL_STORAGE")
+                .filter(|v| !v.is_empty())
+                .map_or_else(|| PathBuf::from("/storage/emulated/0"), PathBuf::from),
+        );
+    }
     let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     std::env::var_os(var).filter(|v| !v.is_empty()).map(PathBuf::from)
 }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../app_model.dart';
@@ -7,6 +9,9 @@ import '../platform.dart';
 /// Access. Without it, macOS asks separately for every protected folder
 /// (Desktop, Documents, Downloads, iCloud Drive, other apps' data, ...),
 /// so we explain that first and let the user pick.
+///
+/// On Android it asks for "All files access" instead: without it SpaceMan
+/// would only see its own files.
 class AccessIntro extends StatefulWidget {
   const AccessIntro({super.key, required this.model});
 
@@ -45,6 +50,7 @@ class _AccessIntroState extends State<AccessIntro> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (Platform.isAndroid) return const _AndroidAccess();
     final theme = Theme.of(context);
     return Center(
       child: SingleChildScrollView(
@@ -124,6 +130,70 @@ class _AccessIntroState extends State<AccessIntro> with WidgetsBindingObserver {
                 'Skips the protected folders, so macOS will not ask anything. '
                 'Their space is not counted.',
                 style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AndroidAccess extends StatelessWidget {
+  const _AndroidAccess();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 48,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'SpaceMan needs to see your files',
+                style: theme.textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'To find out where your space goes, SpaceMan has to read every '
+                'folder on your phone. Android only allows that with "All '
+                'files access".',
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'SpaceMan only reads sizes and never sends anything anywhere. '
+                'Nothing is removed unless you ask for it.',
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 24),
+              const _Step(
+                number: 1,
+                text: 'Tap the button below to open the setting.',
+              ),
+              const _Step(
+                number: 2,
+                text: 'Turn on "Allow access to manage all files".',
+              ),
+              const _Step(
+                number: 3,
+                text: 'Go back. SpaceMan starts scanning right away.',
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: requestAndroidStorageAccess,
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Allow access'),
               ),
             ],
           ),

@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'platform.dart';
 import 'src/rust/api/spaceman.dart' as core;
 
 /// How much of the disk the app may read without macOS permission prompts.
 enum DiskAccess {
-  /// Full Disk Access granted, or not macOS.
+  /// Full Disk Access (macOS) or All files access (Android) granted, or
+  /// another platform.
   full,
 
   /// The user chose to scan without the folders that need permission.
@@ -66,8 +68,13 @@ class AppModel extends ChangeNotifier {
     core.configure(configDir: _configDir, cacheDir: cacheDir);
     protectedPaths = core.protectedPaths();
     // Without Full Disk Access, start with a scan that never makes macOS
-    // prompt; the header offers to grant access.
-    access = core.hasFullDiskAccess() ? DiskAccess.full : DiskAccess.limited;
+    // prompt; the header offers to grant access. Android without access
+    // would only see the app's own files, so explain that first.
+    if (await hasDiskAccess()) {
+      access = DiskAccess.full;
+    } else {
+      access = Platform.isAndroid ? DiskAccess.undecided : DiskAccess.limited;
+    }
 
     try {
       treemap = (await _viewFile.readAsString()).trim() == 'treemap';
@@ -95,6 +102,10 @@ class AppModel extends ChangeNotifier {
       if (saved.isNotEmpty && Directory(saved).existsSync()) return saved;
     } on FileSystemException {
       // First launch.
+    }
+    if (Platform.isAndroid) {
+      final storage = await androidStorageRoot();
+      if (storage != null) return storage;
     }
     return core.homeDir() ?? (await getApplicationDocumentsDirectory()).path;
   }
@@ -131,9 +142,9 @@ class AppModel extends ChangeNotifier {
   }
 
   /// Checks again after the user visited System Settings. Returns whether
-  /// Full Disk Access is now granted.
-  bool recheckAccess() {
-    if (!core.hasFullDiskAccess()) return false;
+  /// access is now granted.
+  Future<bool> recheckAccess() async {
+    if (access == DiskAccess.full || !await hasDiskAccess()) return false;
     access = DiskAccess.full;
     notifyListeners();
     scan();
