@@ -276,9 +276,24 @@ class AppModel extends ChangeNotifier {
       path.startsWith(folder) &&
       (path[folder.length] == '/' || path[folder.length] == r'\');
 
-  Future<core.DeleteReport> deleteSelection({bool permanent = false}) async {
+  /// Removes the selection, reporting progress to [onProgress] as it goes.
+  Future<core.DeleteReport> deleteSelection({
+    bool permanent = false,
+    void Function(core.DeleteProgress)? onProgress,
+  }) async {
     final paths = selectionRoots.map((n) => n.path).toList();
-    final report = await delete(paths, permanent: permanent);
+    late core.DeleteReport report;
+    await for (final p in core.deletePathsWithProgress(
+      paths: paths,
+      permanent: permanent,
+    )) {
+      if (p.report != null) {
+        report = p.report!;
+      } else {
+        onProgress?.call(p);
+      }
+    }
+    _reloadTree();
     for (final p in report.deleted) {
       selection.removeWhere((key, _) => key == p || _isInside(key, p));
     }

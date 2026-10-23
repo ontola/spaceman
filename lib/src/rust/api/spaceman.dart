@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `check_deletable`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `save_cache`, `shown`, `view`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Live`, `State`
+// These functions are ignored because they are not marked as `pub`: `check_deletable`, `delete_inner`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `save_cache`, `shown`, `to_view`, `view`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Live`, `Progress`, `State`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 /// Loads settings (the protect list) from `config_dir`, and keeps scan
@@ -97,6 +97,70 @@ Future<DeleteReport> deletePaths({
   paths: paths,
   permanent: permanent,
 );
+
+/// Like [`delete_paths`], streaming progress about ten times a second. The
+/// last update carries the report. [`cancel_delete`] stops after the file
+/// being removed; what is gone by then stays gone.
+Stream<DeleteProgress> deletePathsWithProgress({
+  required List<String> paths,
+  required bool permanent,
+}) => RustLib.instance.api.crateApiSpacemanDeletePathsWithProgress(
+  paths: paths,
+  permanent: permanent,
+);
+
+/// Stops a running [`delete_paths_with_progress`].
+void cancelDelete() => RustLib.instance.api.crateApiSpacemanCancelDelete();
+
+/// How far a removal is. The last one carries the report.
+class DeleteProgress {
+  /// Items of the selection handled so far, and in total.
+  final PlatformInt64 done;
+  final PlatformInt64 total;
+  final PlatformInt64 freed;
+
+  /// Files removed so far and the files in the selection, as far as the
+  /// scan knows; moves the bar within one big folder.
+  final PlatformInt64 filesDone;
+  final PlatformInt64 filesTotal;
+
+  /// What is being removed now.
+  final String current;
+  final DeleteReport? report;
+
+  const DeleteProgress({
+    required this.done,
+    required this.total,
+    required this.freed,
+    required this.filesDone,
+    required this.filesTotal,
+    required this.current,
+    this.report,
+  });
+
+  @override
+  int get hashCode =>
+      done.hashCode ^
+      total.hashCode ^
+      freed.hashCode ^
+      filesDone.hashCode ^
+      filesTotal.hashCode ^
+      current.hashCode ^
+      report.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DeleteProgress &&
+          runtimeType == other.runtimeType &&
+          done == other.done &&
+          total == other.total &&
+          freed == other.freed &&
+          filesDone == other.filesDone &&
+          filesTotal == other.filesTotal &&
+          current == other.current &&
+          report == other.report;
+}
 
 class DeleteReport {
   final List<String> deleted;

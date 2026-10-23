@@ -27,6 +27,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
+  RustStreamSink<DeleteProgress> dco_decode_StreamSink_delete_progress_Sse(
+    dynamic raw,
+  );
+
+  @protected
   RustStreamSink<ScanUpdate> dco_decode_StreamSink_scan_update_Sse(dynamic raw);
 
   @protected
@@ -36,6 +41,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  DeleteReport dco_decode_box_autoadd_delete_report(dynamic raw);
+
+  @protected
   DiskSpace dco_decode_box_autoadd_disk_space(dynamic raw);
 
   @protected
@@ -43,6 +51,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NodeView dco_decode_box_autoadd_node_view(dynamic raw);
+
+  @protected
+  DeleteProgress dco_decode_delete_progress(dynamic raw);
 
   @protected
   DeleteReport dco_decode_delete_report(dynamic raw);
@@ -84,6 +95,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  DeleteReport? dco_decode_opt_box_autoadd_delete_report(dynamic raw);
+
+  @protected
   DiskSpace? dco_decode_opt_box_autoadd_disk_space(dynamic raw);
 
   @protected
@@ -120,6 +134,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<DeleteProgress> sse_decode_StreamSink_delete_progress_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<ScanUpdate> sse_decode_StreamSink_scan_update_Sse(
     SseDeserializer deserializer,
   );
@@ -131,6 +150,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  DeleteReport sse_decode_box_autoadd_delete_report(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   DiskSpace sse_decode_box_autoadd_disk_space(SseDeserializer deserializer);
 
   @protected
@@ -138,6 +162,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NodeView sse_decode_box_autoadd_node_view(SseDeserializer deserializer);
+
+  @protected
+  DeleteProgress sse_decode_delete_progress(SseDeserializer deserializer);
 
   @protected
   DeleteReport sse_decode_delete_report(SseDeserializer deserializer);
@@ -183,6 +210,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  DeleteReport? sse_decode_opt_box_autoadd_delete_report(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   DiskSpace? sse_decode_opt_box_autoadd_disk_space(
     SseDeserializer deserializer,
   );
@@ -226,6 +258,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_StreamSink_delete_progress_Sse(
+    RustStreamSink<DeleteProgress> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_StreamSink_scan_update_Sse(
     RustStreamSink<ScanUpdate> self,
     SseSerializer serializer,
@@ -236,6 +274,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_delete_report(
+    DeleteReport self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_disk_space(
@@ -252,6 +296,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_node_view(
     NodeView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_delete_progress(
+    DeleteProgress self,
     SseSerializer serializer,
   );
 
@@ -302,6 +352,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_delete_report(
+    DeleteReport? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_disk_space(
