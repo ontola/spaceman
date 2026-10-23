@@ -142,9 +142,13 @@ class _HomePageState extends State<HomePage> {
                     selectedIndex: _tab,
                     onDestinationSelected: (i) => setState(() => _tab = i),
                     labelType: NavigationRailLabelType.all,
-                    leading: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: SpaceManLogo(size: 48),
+                    // The logo sits flush at the bottom, out of the way of
+                    // the tabs.
+                    trailing: const Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SpaceManLogo(size: 40),
+                      ),
                     ),
                     destinations: [
                       for (final (i, d) in _destinations.indexed)
