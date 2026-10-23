@@ -44,6 +44,20 @@ class AppModel extends ChangeNotifier {
   StreamSubscription<core.ScanUpdate>? _scanSub;
 
   File get _lastRootFile => File('$_configDir/last_root.txt');
+  File get _viewFile => File('$_configDir/explorer_view.txt');
+
+  /// Explore shows a treemap instead of the list.
+  bool treemap = false;
+
+  Future<void> setTreemap(bool on) async {
+    treemap = on;
+    notifyListeners();
+    try {
+      await _viewFile.writeAsString(on ? 'treemap' : 'list');
+    } on FileSystemException {
+      // Not remembering the view is not worth bothering the user about.
+    }
+  }
 
   /// Loads settings and the cached scan, then refreshes it in the background.
   Future<void> init() async {
@@ -55,6 +69,11 @@ class AppModel extends ChangeNotifier {
     // prompt; the header offers to grant access.
     access = core.hasFullDiskAccess() ? DiskAccess.full : DiskAccess.limited;
 
+    try {
+      treemap = (await _viewFile.readAsString()).trim() == 'treemap';
+    } on FileSystemException {
+      // First launch: the list.
+    }
     root = await _initialRoot();
     notifyListeners();
 

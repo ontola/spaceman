@@ -6,6 +6,7 @@ import '../app_model.dart';
 import '../format.dart';
 import '../src/rust/api/spaceman.dart';
 import '../widgets/selection_bar.dart';
+import '../widgets/treemap.dart';
 
 /// Drill-down view of where space is used, largest items first.
 ///
@@ -216,7 +217,40 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Breadcrumbs(model: model, crumbs: crumbs, onOpen: _go),
+              Row(
+                children: [
+                  Expanded(
+                    child: _Breadcrumbs(
+                      model: model,
+                      crumbs: crumbs,
+                      onOpen: _go,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.view_list, size: 18),
+                          tooltip: 'List',
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.dashboard, size: 18),
+                          tooltip: 'Treemap',
+                        ),
+                      ],
+                      selected: {model.treemap},
+                      onSelectionChanged: (v) => model.setTreemap(v.single),
+                    ),
+                  ),
+                ],
+              ),
               Expanded(
                 child: GestureDetector(
                   // Touch screens; the trackpad is handled above.
@@ -295,6 +329,14 @@ class _ExplorerScreenState extends State<ExplorerScreen>
 
   /// The contents of folder [id]: its size and its items, largest first.
   Widget _list(int id) {
+    if (model.treemap) {
+      return Treemap(
+        key: ValueKey(('treemap', id)),
+        model: model,
+        folderId: id,
+        onOpen: _go,
+      );
+    }
     final crumbs = model.breadcrumbs(id);
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
