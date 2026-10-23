@@ -69,7 +69,7 @@ class ScanHeader extends StatelessWidget {
                 IconButton(
                   tooltip: 'Choose folder',
                   onPressed: _pickFolder,
-                  icon: const Icon(Icons.drive_folder_upload_outlined),
+                  icon: const Icon(Icons.folder_open_outlined),
                 ),
               if (model.scanning)
                 IconButton(
