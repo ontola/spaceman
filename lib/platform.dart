@@ -28,6 +28,24 @@ Future<void> reveal(String path) async {
   }
 }
 
+/// Where the logo leads. The GitHub page until there is a website.
+const websiteUrl = 'https://github.com/ontola/spaceman';
+
+bool get canOpenUrl =>
+    Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+
+/// Opens [url] in the default browser.
+Future<void> openUrl(String url) async {
+  if (Platform.isMacOS) {
+    await Process.run('open', [url]);
+  } else if (Platform.isWindows) {
+    // The empty argument is the window title `start` expects first.
+    await Process.run('cmd', ['/c', 'start', '', url]);
+  } else if (Platform.isLinux) {
+    await Process.run('xdg-open', [url]);
+  }
+}
+
 /// Whether removed items go to a trash the user can restore from.
 bool get hasTrash => Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 

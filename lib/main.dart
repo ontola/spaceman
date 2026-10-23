@@ -5,6 +5,7 @@ import 'package:spaceman/src/rust/frb_generated.dart';
 
 import 'app_model.dart';
 import 'palette.dart';
+import 'platform.dart';
 import 'screens/access_intro.dart';
 import 'screens/apps.dart';
 import 'screens/cleanup.dart';
@@ -144,10 +145,21 @@ class _HomePageState extends State<HomePage> {
                     labelType: NavigationRailLabelType.all,
                     // The logo sits flush at the bottom, out of the way of
                     // the tabs.
-                    trailing: const Expanded(
+                    trailing: Expanded(
                       child: Align(
                         alignment: Alignment.bottomCenter,
-                        child: SpaceManLogo(size: 40),
+                        child: canOpenUrl
+                            ? Tooltip(
+                                message: 'SpaceMan website',
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () => openUrl(websiteUrl),
+                                    child: const SpaceManLogo(size: 40),
+                                  ),
+                                ),
+                              )
+                            : const SpaceManLogo(size: 40),
                       ),
                     ),
                     destinations: [
