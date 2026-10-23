@@ -45,7 +45,6 @@ class LogoPainter extends CustomPainter {
   Color get _rim => Color.lerp(scheme.primary, Colors.black, 0.72)!;
   Color get _suit => Color.lerp(Colors.white, scheme.primary, 0.03)!;
   Color get _suitShade => Color.lerp(Colors.white, scheme.primary, 0.2)!;
-  Color get _space => Color.lerp(scheme.primary, Colors.black, 0.84)!;
 
   /// The treemap palette, a bit livelier so it reads at icon size.
   static Color _tile(int hue, int depth) {
@@ -55,6 +54,10 @@ class LogoPainter extends CustomPainter {
         .withLightness((c.lightness - 0.1).clamp(0, 1))
         .toColor();
   }
+
+  /// The treemap hues at full blast, for the background burst.
+  static Color _vivid(int hue) =>
+      HSLColor.fromAHSL(1, tileHue(hue), 0.85, 0.55).toColor();
 
   // Everything below is laid out in a unit square.
   static const _helmet = Offset(0.5, 0.44);
@@ -73,16 +76,8 @@ class LogoPainter extends CustomPainter {
 
     final bg = _backgroundPath();
     if (bg != null) {
-      canvas.drawPath(
-        bg,
-        Paint()
-          ..shader = ui.Gradient.radial(_helmet, 0.6, [
-            Color.lerp(_space, scheme.primary, 0.35)!,
-            _space,
-          ]),
-      );
-      _stars(canvas);
       canvas.clipPath(bg);
+      _burst(canvas);
     }
 
     _body(canvas);
@@ -104,17 +99,53 @@ class LogoPainter extends CustomPainter {
     };
   }
 
-  void _stars(Canvas canvas) {
-    final p = Paint()..color = Colors.white.withValues(alpha: 0.8);
-    for (final (x, y, r) in const [
-      (0.13, 0.2, 0.008),
-      (0.86, 0.16, 0.011),
-      (0.9, 0.52, 0.007),
-      (0.2, 0.62, 0.006),
-      (0.72, 0.06, 0.006),
-    ]) {
-      canvas.drawCircle(Offset(x, y), r, p);
+  /// A psychedelic burst radiating from the helmet: scalloped rings running
+  /// through the treemap hues, crossed by light and dark rays.
+  void _burst(Canvas canvas) {
+    canvas.drawPaint(Paint()..color = _vivid(0));
+    const steps = 360;
+    for (var j = 32; j > 0; j--) {
+      final base = 0.02 + j * 0.03;
+      final ring = Path();
+      for (var k = 0; k <= steps; k++) {
+        final a = k / steps * 2 * math.pi;
+        final r = base * (1 + 0.14 * math.cos(16 * a + j * 0.8));
+        final p = _helmet + Offset(math.cos(a), math.sin(a)) * r;
+        k == 0 ? ring.moveTo(p.dx, p.dy) : ring.lineTo(p.dx, p.dy);
+      }
+      canvas.drawPath(ring..close(), Paint()..color = _vivid(j));
     }
+
+    const rays = 48;
+    for (var i = 0; i < rays; i++) {
+      final a0 = i / rays * 2 * math.pi;
+      final a1 = (i + 1) / rays * 2 * math.pi;
+      final wedge = Path()
+        ..moveTo(_helmet.dx, _helmet.dy)
+        ..lineTo(_helmet.dx + math.cos(a0) * 2, _helmet.dy + math.sin(a0) * 2)
+        ..lineTo(_helmet.dx + math.cos(a1) * 2, _helmet.dy + math.sin(a1) * 2)
+        ..close();
+      canvas.drawPath(
+        wedge,
+        Paint()
+          ..color = i.isEven
+              ? Colors.white.withValues(alpha: 0.22)
+              : Colors.black.withValues(alpha: 0.14),
+      );
+    }
+
+    // A dark halo behind the astronaut keeps the outline readable.
+    canvas.drawCircle(
+      _helmet,
+      0.62,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          _helmet,
+          0.62,
+          [_rim.withValues(alpha: 0.45), _rim.withValues(alpha: 0)],
+          [0.45, 0.8],
+        ),
+    );
   }
 
   Paint get _outline => Paint()
