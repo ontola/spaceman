@@ -53,7 +53,8 @@ rust_builder/       cargokit glue that builds the Rust crate per platform
 
 ## Development
 
-Requirements: Flutter (stable), Rust (stable). On macOS also Xcode.
+Requirements: Flutter (stable), Rust (stable). On macOS also Xcode; on
+Windows Visual Studio with the "Desktop development with C++" workload.
 
 ```sh
 flutter run -d macos           # builds the Rust crate automatically
@@ -74,6 +75,15 @@ The app is not sandboxed, because it needs to read the whole disk and use the
 Trash. That rules out the Mac App Store; distribute it signed and notarized
 instead. To scan protected locations (Mail, Messages, other users' folders),
 grant SpaceMan *Full Disk Access* in System Settings > Privacy & Security.
+
+### Windows notes
+
+`flutter run -d windows` or `flutter build windows --release`; the app is
+`build\windows\x64\runner\Release\SpaceMan.exe` with the DLLs and `data`
+folder next to it. No permissions are needed. Removed items go to the Recycle
+Bin. Files in OneDrive that are only in the cloud count as taking no space.
+
+CI publishes unsigned zips for both platforms as the `dev` prerelease.
 
 ## Ideas
 

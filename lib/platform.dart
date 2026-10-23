@@ -27,6 +27,9 @@ Future<void> reveal(String path) async {
 /// Whether removed items go to a trash the user can restore from.
 bool get hasTrash => Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
+/// What the system calls its trash, for labels.
+String get trashName => Platform.isWindows ? 'Recycle Bin' : 'Trash';
+
 /// Opens the Full Disk Access pane of System Settings (macOS only).
 Future<void> openFullDiskAccessSettings() async {
   await Process.run('open', [

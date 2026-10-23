@@ -12,7 +12,7 @@ import '../widgets/treemap.dart';
 ///
 /// Folders slide like a navigation stack. Going up: swipe right (two
 /// fingers on a trackpad, one on a touch screen), the mouse back button,
-/// Cmd+[, Cmd+Up or Backspace.
+/// Cmd+[, Cmd+Up, Alt+Up, Alt+Left or Backspace.
 class ExplorerScreen extends StatefulWidget {
   const ExplorerScreen({super.key, required this.model});
 
@@ -204,6 +204,9 @@ class _ExplorerScreenState extends State<ExplorerScreen>
       bindings: {
         const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): _up,
         const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
+        // Explorer's shortcuts on Windows and Linux.
+        const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): _up,
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): _up,
         const SingleActivator(LogicalKeyboardKey.backspace): _up,
       },
       child: Focus(

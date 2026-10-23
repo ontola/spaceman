@@ -101,7 +101,7 @@ class _SelectionBarState extends State<SelectionBar> {
                 FilledButton.icon(
                   onPressed: () => _confirmAndDelete(context, model),
                   icon: const Icon(Icons.delete_outline),
-                  label: Text(hasTrash ? 'Move to Trash' : 'Delete'),
+                  label: Text(hasTrash ? 'Move to $trashName' : 'Delete'),
                 ),
               ],
             ),
@@ -129,13 +129,13 @@ Future<void> _confirmAndDelete(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(
-        toTrash ? 'Move $what to the Trash?' : 'Delete $what permanently?',
+        toTrash ? 'Move $what to the $trashName?' : 'Delete $what permanently?',
       ),
       content: Text(
         toTrash
-            ? 'This frees up to ${formatBytes(total)} once the Trash is emptied. '
-                  'You can still restore it from the Trash.'
-                  '${model.selectionEmptiesTrash ? '\n\nThe current contents of the Trash are deleted for good.' : ''}'
+            ? 'This frees up to ${formatBytes(total)} once the $trashName is emptied. '
+                  'You can still restore it from the $trashName.'
+                  '${model.selectionEmptiesTrash ? '\n\nThe current contents of the $trashName are deleted for good.' : ''}'
             : 'This frees ${formatBytes(total)}. This cannot be undone.',
       ),
       actions: [
@@ -151,7 +151,7 @@ Future<void> _confirmAndDelete(
                   backgroundColor: Theme.of(context).colorScheme.error,
                   foregroundColor: Theme.of(context).colorScheme.onError,
                 ),
-          child: Text(toTrash ? 'Move to Trash' : 'Delete permanently'),
+          child: Text(toTrash ? 'Move to $trashName' : 'Delete permanently'),
         ),
       ],
     ),

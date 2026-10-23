@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "io.ontola" "\0"
-            VALUE "FileDescription", "spaceman" "\0"
+            VALUE "CompanyName", "Ontola" "\0"
+            VALUE "FileDescription", "SpaceMan" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "spaceman" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 io.ontola. All rights reserved." "\0"
-            VALUE "OriginalFilename", "spaceman.exe" "\0"
-            VALUE "ProductName", "spaceman" "\0"
+            VALUE "InternalName", "SpaceMan" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Ontola. All rights reserved." "\0"
+            VALUE "OriginalFilename", "SpaceMan.exe" "\0"
+            VALUE "ProductName", "SpaceMan" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
