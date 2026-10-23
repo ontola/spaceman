@@ -8,6 +8,21 @@ import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
 import 'fly_to.dart';
 
+/// Where a folder's treemap was last drawn: its area and every tile in it
+/// (nested ones too), in the coordinates of the Explore list area. Explore
+/// zooms between levels with it.
+class TreemapLayout {
+  const TreemapLayout(this.area, this.tiles);
+
+  final Rect area;
+  final Map<int, Rect> tiles;
+}
+
+final treemapLayouts = <int, TreemapLayout>{};
+
+/// The treemap's inset within the list area.
+const _inset = Offset(16, 0);
+
 /// Squarified treemap of a folder: every tile is an item, its area its
 /// size. Big folders show their own contents inside them, a level or two
 /// deep while the tiles stay legible.
@@ -46,6 +61,16 @@ class _TreemapState extends State<Treemap> {
       _layoutKey = key;
       _hover = null;
       _tiles = _build(widget.folderId, Offset.zero & size, 0, 0);
+      final rects = <int, Rect>{};
+      void collect(List<_Tile> tiles) {
+        for (final t in tiles) {
+          if (t.node != null) rects[t.node!.id] = t.rect.shift(_inset);
+          collect(t.children);
+        }
+      }
+
+      collect(_tiles);
+      treemapLayouts[widget.folderId] = TreemapLayout(_inset & size, rects);
     }
     return _tiles;
   }
@@ -130,6 +155,17 @@ class _TreemapState extends State<Treemap> {
     return null;
   }
 
+  static PopupMenuItem<String> _item(
+    String value,
+    IconData icon,
+    String label,
+  ) => PopupMenuItem(
+    value: value,
+    child: Row(
+      children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)],
+    ),
+  );
+
   Future<void> _menu(BuildContext context, Offset global, _Tile tile) async {
     final node = tile.node;
     if (node == null) return;
@@ -140,19 +176,16 @@ class _TreemapState extends State<Treemap> {
       position: RelativeRect.fromLTRB(global.dx, global.dy, global.dx, 0),
       items: [
         if (node.kind == EntryKind.dir && node.hasChildren)
-          const PopupMenuItem(value: 'open', child: Text('Open')),
+          _item('open', Icons.folder_open, 'Open'),
         if (selectable)
-          PopupMenuItem(
-            value: 'select',
-            child: Text(selected ? 'Unselect' : 'Select'),
+          _item(
+            'select',
+            selected ? Icons.check_box : Icons.check_box_outline_blank,
+            selected ? 'Unselect' : 'Select',
           ),
-        if (selectable)
-          const PopupMenuItem(value: 'protect', child: Text('Do not touch')),
+        if (selectable) _item('protect', Icons.lock_outline, 'Do not touch'),
         if (canReveal)
-          PopupMenuItem(
-            value: 'reveal',
-            child: Text('Show in $fileManagerName'),
-          ),
+          _item('reveal', Icons.open_in_new, 'Show in $fileManagerName'),
       ],
     );
     if (!context.mounted) return;

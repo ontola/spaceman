@@ -75,7 +75,8 @@ class _ExplorerScreenState extends State<ExplorerScreen>
         .animateTo(
           deeper ? 0 : 1,
           duration: _duration,
-          curve: Curves.easeOutCubic,
+          // A zoom eases both ways; a slide decelerates into place.
+          curve: model.treemap ? Curves.easeInOutCubic : Curves.easeOutCubic,
         )
         .whenComplete(_clearTransition);
   }
@@ -278,52 +279,105 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final above = _above;
     if (above == null) return _list(model.currentId);
     final below = _below;
-    final background = Theme.of(context).colorScheme.surface;
+    if (model.treemap && below != null) {
+      return AnimatedBuilder(
+        animation: _t,
+        builder: (context, _) =>
+            _zoom(below, above, 1 - _t.value) ??
+            _slide(context, below, above, _t.value),
+      );
+    }
     return AnimatedBuilder(
       animation: _t,
-      builder: (context, _) {
-        final t = _t.value;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            if (below != null)
-              // The folder underneath trails behind with a parallax shift
-              // and is dimmed while covered.
-              Transform.translate(
-                offset: Offset(-_width * 0.3 * (1 - t), 0),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _list(below),
-                    IgnorePointer(
-                      child: ColoredBox(
-                        color: Colors.black.withValues(alpha: 0.06 * (1 - t)),
-                      ),
-                    ),
-                  ],
+      builder: (context, _) => _slide(context, below, above, _t.value),
+    );
+  }
+
+  /// Treemap transition: the tile of [inner] inside [outer] grows to fill
+  /// the area as [z] goes from 0 to 1, while the outer map zooms with it
+  /// and fades out. Null until the outer map has been laid out once.
+  Widget? _zoom(int outer, int inner, double z) {
+    final layout = treemapLayouts[outer];
+    if (layout == null) return null;
+    // The tile itself, or for a jump of several levels, the tile of the
+    // ancestor that contains it.
+    Rect? tile;
+    for (final c in model.breadcrumbs(inner).reversed) {
+      tile = layout.tiles[c.id];
+      if (tile != null) break;
+    }
+    if (tile == null || tile.isEmpty) return null;
+    final full = layout.area;
+    final r = Rect.lerp(tile, full, z)!;
+
+    Matrix4 mapping(Rect from) {
+      final sx = r.width / from.width, sy = r.height / from.height;
+      return Matrix4.identity()
+        ..translateByDouble(
+          r.left - from.left * sx,
+          r.top - from.top * sy,
+          0,
+          1,
+        )
+        ..scaleByDouble(sx, sy, 1, 1);
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(
+          opacity: (1 - z).clamp(0.0, 1.0),
+          child: Transform(transform: mapping(tile), child: _list(outer)),
+        ),
+        Opacity(
+          opacity: (z * 1.6).clamp(0.0, 1.0),
+          child: Transform(transform: mapping(full), child: _list(inner)),
+        ),
+      ],
+    );
+  }
+
+  Widget _slide(BuildContext context, int? below, int above, double t) {
+    final background = Theme.of(context).colorScheme.surface;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (below != null)
+          // The folder underneath trails behind with a parallax shift
+          // and is dimmed while covered.
+          Transform.translate(
+            offset: Offset(-_width * 0.3 * (1 - t), 0),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _list(below),
+                IgnorePointer(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.06 * (1 - t)),
+                  ),
                 ),
-              ),
-            Transform.translate(
-              offset: Offset(_width * t, 0),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    if (below != null && t > 0 && t < 1)
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
-                        blurRadius: 16,
-                        offset: const Offset(-4, 0),
-                      ),
-                  ],
-                ),
-                // Opaque, so the folder underneath does not show through;
-                // a Material keeps the rows' ink visible.
-                child: Material(color: background, child: _list(above)),
-              ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+        Transform.translate(
+          offset: Offset(_width * t, 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: [
+                if (below != null && t > 0 && t < 1)
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 16,
+                    offset: const Offset(-4, 0),
+                  ),
+              ],
+            ),
+            // Opaque, so the folder underneath does not show through;
+            // a Material keeps the rows' ink visible.
+            child: Material(color: background, child: _list(above)),
+          ),
+        ),
+      ],
     );
   }
 
