@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `check_deletable`, `home`, `previous_scan`, `remove_from_disk`, `remove_permanently`, `save_cache`, `view`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `State`
+// These functions are ignored because they are not marked as `pub`: `check_deletable`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `save_cache`, `shown`, `view`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Live`, `State`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 /// Loads settings (the protect list) from `config_dir`, and keeps scan
@@ -181,6 +181,10 @@ class NodeView {
   final ProtectionState protection;
   final bool hasChildren;
 
+  /// Still being scanned: the size is still growing and the contents are
+  /// not known yet.
+  final bool scanning;
+
   const NodeView({
     required this.id,
     required this.name,
@@ -191,6 +195,7 @@ class NodeView {
     required this.modified,
     required this.protection,
     required this.hasChildren,
+    required this.scanning,
   });
 
   @override
@@ -203,7 +208,8 @@ class NodeView {
       kind.hashCode ^
       modified.hashCode ^
       protection.hashCode ^
-      hasChildren.hashCode;
+      hasChildren.hashCode ^
+      scanning.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -218,7 +224,8 @@ class NodeView {
           kind == other.kind &&
           modified == other.modified &&
           protection == other.protection &&
-          hasChildren == other.hasChildren;
+          hasChildren == other.hasChildren &&
+          scanning == other.scanning;
 }
 
 enum ProtectionState { none, protected, containsProtected }
@@ -249,6 +256,9 @@ class ScanUpdate {
   /// Set when the scan failed.
   final String? error;
 
+  /// A new view of the scan so far is available: refetch what is shown.
+  final bool live;
+
   const ScanUpdate({
     required this.files,
     required this.dirs,
@@ -258,6 +268,7 @@ class ScanUpdate {
     required this.done,
     required this.partial,
     this.error,
+    required this.live,
   });
 
   @override
@@ -269,7 +280,8 @@ class ScanUpdate {
       elapsedMs.hashCode ^
       done.hashCode ^
       partial.hashCode ^
-      error.hashCode;
+      error.hashCode ^
+      live.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -283,7 +295,8 @@ class ScanUpdate {
           elapsedMs == other.elapsedMs &&
           done == other.done &&
           partial == other.partial &&
-          error == other.error;
+          error == other.error &&
+          live == other.live;
 }
 
 enum SuggestionCategory {

@@ -115,6 +115,7 @@ class AppModel extends ChangeNotifier {
     root = path;
     rootNode = null;
     currentId = 0;
+    _currentPath = null;
     suggestions = [];
     try {
       await _lastRootFile.parent.create(recursive: true);
@@ -166,7 +167,13 @@ class AppModel extends ChangeNotifier {
         .listen(
           (update) {
             progress = update;
+            if (update.live) {
+              live = true;
+              rootNode = core.rootNode();
+              _findCurrent();
+            }
             if (update.done) {
+              live = false;
               _scanSub = null;
               stopping = false;
               if (update.error != null) {
@@ -198,11 +205,23 @@ class AppModel extends ChangeNotifier {
 
   void _reloadTree() {
     rootNode = core.rootNode();
-    // Keep the user's place if that folder still exists.
-    if (rootNode == null || core.breadcrumbs(id: currentId).isEmpty) {
-      currentId = 0;
-    }
+    _findCurrent();
     refreshSuggestions();
+  }
+
+  /// Keeps the user's place if that folder still exists.
+  void _findCurrent() {
+    final path = _currentPath;
+    final id = rootNode == null || path == null
+        ? null
+        : core.nodeAt(path: path)?.id;
+    if (id == null) {
+      currentId = 0;
+      // Not there yet in a live view: keep looking for it.
+      if (!live) _currentPath = null;
+    } else {
+      currentId = id;
+    }
   }
 
   Future<void> refreshSuggestions() async {
@@ -280,8 +299,17 @@ class AppModel extends ChangeNotifier {
 
   void open(int id) {
     currentId = id;
+    _currentPath = id == 0 ? null : core.breadcrumbs(id: id).lastOrNull?.path;
     notifyListeners();
   }
+
+  /// Path of the open folder, to find it again in a new tree (ids differ
+  /// between the live view of a scan and its result).
+  String? _currentPath;
+
+  /// Showing the scan as it runs, not a finished one. Items can not be
+  /// removed yet: their folders are not fully known.
+  bool live = false;
 
   void protect(String path) {
     core.protectPath(path: path);

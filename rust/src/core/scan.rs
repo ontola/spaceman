@@ -14,10 +14,12 @@
 use std::fs::{self, Metadata};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 use rayon::prelude::*;
 
+use super::live::{self, LiveNode, LiveTree};
 use super::tree::{Node, NodeId, NodeKind, Tree};
 
 #[derive(Debug, Clone)]
@@ -29,11 +31,13 @@ pub struct ScanOptions {
     /// Directories not to enter, e.g. privacy-protected folders that would
     /// make macOS show a permission prompt.
     pub skip: Vec<PathBuf>,
+    /// Keep a live view of the top folders in [`ScanProgress::live`].
+    pub live: bool,
 }
 
 impl Default for ScanOptions {
     fn default() -> Self {
-        Self { min_file_size: 1024 * 1024, same_filesystem: true, skip: Vec::new() }
+        Self { min_file_size: 1024 * 1024, same_filesystem: true, skip: Vec::new(), live: false }
     }
 }
 
@@ -47,6 +51,8 @@ pub struct ScanProgress {
     /// Folders that could not be listed, up to [`MAX_UNREADABLE`].
     pub unreadable: std::sync::Mutex<Vec<PathBuf>>,
     pub cancel: AtomicBool,
+    /// The scan so far, when [`ScanOptions::live`] is set.
+    pub live: LiveTree,
 }
 
 /// How many unreadable folders a scan remembers by path.
@@ -121,7 +127,8 @@ pub fn scan_with_cache(
             .unwrap_or_default(),
     };
     let cached = ctx.previous.map(|_| Tree::ROOT);
-    let dir = walk(root, String::new().into_boxed_str(), &meta, cached, &ctx);
+    let at = Place { depth: 0, live: None };
+    let dir = walk(root, String::new().into_boxed_str(), &meta, cached, &at, &ctx);
     let scanned_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -142,7 +149,16 @@ pub fn scan_with_cache(
     Ok(tree)
 }
 
-fn walk(path: &Path, name: Box<str>, meta: &Metadata, cached: Option<NodeId>, ctx: &Ctx) -> DirTree {
+/// Where a directory sits: its depth, and the live node its sizes count
+/// towards (its own or the nearest ancestor's).
+struct Place<'a> {
+    depth: usize,
+    live: Option<&'a Arc<LiveNode>>,
+}
+
+fn walk(path: &Path, name: Box<str>, meta: &Metadata, cached: Option<NodeId>, at: &Place, ctx: &Ctx) -> DirTree {
+    let own_live = (ctx.opts.live && at.depth <= live::DEPTH).then(|| ctx.progress.live.add(at.live, name.clone()));
+    let live = own_live.as_ref().or(at.live);
     let mut out = DirTree {
         name,
         modified: mtime(meta),
@@ -161,6 +177,21 @@ fn walk(path: &Path, name: Box<str>, meta: &Metadata, cached: Option<NodeId>, ct
         out.stamp = 0;
         return out;
     }
+    let out = walk_inner(path, out, cached, live, at.depth, ctx);
+    if let Some(n) = own_live {
+        n.done.store(true, Ordering::Relaxed);
+    }
+    out
+}
+
+fn walk_inner(
+    path: &Path,
+    mut out: DirTree,
+    cached: Option<NodeId>,
+    live: Option<&Arc<LiveNode>>,
+    depth: usize,
+    ctx: &Ctx,
+) -> DirTree {
 
     let subdirs = match (ctx.previous, cached) {
         (Some(prev), Some(id))
@@ -173,9 +204,14 @@ fn walk(path: &Path, name: Box<str>, meta: &Metadata, cached: Option<NodeId>, ct
         _ => read_listing(path, &mut out, ctx),
     };
 
+    if let Some(l) = live {
+        l.own_bytes.fetch_add(out.size, Ordering::Relaxed);
+        l.own_files.fetch_add(out.file_count, Ordering::Relaxed);
+    }
+    let at = Place { depth: depth + 1, live };
     out.dirs = subdirs
         .into_par_iter()
-        .map(|(p, n, m, c)| walk(&p, n, &m, c, ctx))
+        .map(|(p, n, m, c)| walk(&p, n, &m, c, &at, ctx))
         .collect();
     for d in &out.dirs {
         out.size += d.size;

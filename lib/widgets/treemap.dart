@@ -169,7 +169,7 @@ class _TreemapState extends State<Treemap> {
   Future<void> _menu(BuildContext context, Offset global, _Tile tile) async {
     final node = tile.node;
     if (node == null) return;
-    final selectable = node.protection == ProtectionState.none;
+    final selectable = !model.live && node.protection == ProtectionState.none;
     final selected = model.isSelected(node.path);
     final choice = await showMenu<String>(
       context: context,
@@ -421,7 +421,9 @@ class _Painter extends CustomPainter {
         : node.kind == EntryKind.smallFiles
         ? node.name
         : node.name;
-    final sizeText = formatBytes(node?.size ?? t.moreSize);
+    // A folder still being scanned is still growing.
+    final sizeText =
+        '${formatBytes(node?.size ?? t.moreSize)}${node?.scanning ?? false ? ' …' : ''}';
     final onFill = _dark ? Colors.white : Colors.black87;
     final nested = t.children.isNotEmpty;
     if (nested) {

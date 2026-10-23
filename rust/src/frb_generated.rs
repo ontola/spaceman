@@ -826,6 +826,7 @@ impl SseDecode for crate::api::spaceman::NodeView {
         let mut var_modified = <i64>::sse_decode(deserializer);
         let mut var_protection = <crate::api::spaceman::ProtectionState>::sse_decode(deserializer);
         let mut var_hasChildren = <bool>::sse_decode(deserializer);
+        let mut var_scanning = <bool>::sse_decode(deserializer);
         return crate::api::spaceman::NodeView {
             id: var_id,
             name: var_name,
@@ -836,6 +837,7 @@ impl SseDecode for crate::api::spaceman::NodeView {
             modified: var_modified,
             protection: var_protection,
             has_children: var_hasChildren,
+            scanning: var_scanning,
         };
     }
 }
@@ -921,6 +923,7 @@ impl SseDecode for crate::api::spaceman::ScanUpdate {
         let mut var_done = <bool>::sse_decode(deserializer);
         let mut var_partial = <bool>::sse_decode(deserializer);
         let mut var_error = <Option<String>>::sse_decode(deserializer);
+        let mut var_live = <bool>::sse_decode(deserializer);
         return crate::api::spaceman::ScanUpdate {
             files: var_files,
             dirs: var_dirs,
@@ -930,6 +933,7 @@ impl SseDecode for crate::api::spaceman::ScanUpdate {
             done: var_done,
             partial: var_partial,
             error: var_error,
+            live: var_live,
         };
     }
 }
@@ -1135,6 +1139,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::spaceman::NodeView {
             self.modified.into_into_dart().into_dart(),
             self.protection.into_into_dart().into_dart(),
             self.has_children.into_into_dart().into_dart(),
+            self.scanning.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1206,6 +1211,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::spaceman::ScanUpdate {
             self.done.into_into_dart().into_dart(),
             self.partial.into_into_dart().into_dart(),
             self.error.into_into_dart().into_dart(),
+            self.live.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1421,6 +1427,7 @@ impl SseEncode for crate::api::spaceman::NodeView {
         <i64>::sse_encode(self.modified, serializer);
         <crate::api::spaceman::ProtectionState>::sse_encode(self.protection, serializer);
         <bool>::sse_encode(self.has_children, serializer);
+        <bool>::sse_encode(self.scanning, serializer);
     }
 }
 
@@ -1509,6 +1516,7 @@ impl SseEncode for crate::api::spaceman::ScanUpdate {
         <bool>::sse_encode(self.done, serializer);
         <bool>::sse_encode(self.partial, serializer);
         <Option<String>>::sse_encode(self.error, serializer);
+        <bool>::sse_encode(self.live, serializer);
     }
 }
 

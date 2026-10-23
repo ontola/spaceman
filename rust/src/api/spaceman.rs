@@ -22,8 +22,28 @@ use crate::frb_generated::StreamSink;
 #[derive(Default)]
 struct State {
     tree: Option<Tree>,
+    /// The running scan so far, shown while there is no `tree` yet.
+    live: Option<Live>,
     protect: ProtectList,
     cache_dir: Option<PathBuf>,
+}
+
+#[flutter_rust_bridge::frb(ignore)]
+struct Live {
+    tree: Tree,
+    /// Per node: still being scanned.
+    pending: Vec<bool>,
+}
+
+impl State {
+    /// The tree to show: the finished scan, or else the one in progress.
+    fn shown(&self) -> Option<(&Tree, &[bool])> {
+        match (&self.tree, &self.live) {
+            (Some(t), _) => Some((t, &[])),
+            (None, Some(l)) => Some((&l.tree, &l.pending)),
+            _ => None,
+        }
+    }
 }
 
 static STATE: LazyLock<RwLock<State>> = LazyLock::new(Default::default);
@@ -54,6 +74,9 @@ pub struct NodeView {
     pub modified: i64,
     pub protection: ProtectionState,
     pub has_children: bool,
+    /// Still being scanned: the size is still growing and the contents are
+    /// not known yet.
+    pub scanning: bool,
 }
 
 pub struct ScanUpdate {
@@ -68,6 +91,8 @@ pub struct ScanUpdate {
     pub partial: bool,
     /// Set when the scan failed.
     pub error: Option<String>,
+    /// A new view of the scan so far is available: refetch what is shown.
+    pub live: bool,
 }
 
 pub enum SuggestionCategory {
@@ -178,7 +203,7 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
         old.cancel.store(true, Ordering::Relaxed);
     }
     let start = Instant::now();
-    let update = |done: bool, error: Option<String>| ScanUpdate {
+    let update = |done: bool, error: Option<String>, live: bool| ScanUpdate {
         files: progress.files.load(Ordering::Relaxed) as i64,
         dirs: progress.dirs.load(Ordering::Relaxed) as i64,
         bytes: progress.bytes.load(Ordering::Relaxed) as i64,
@@ -187,22 +212,37 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
         done,
         partial: progress.cancel.load(Ordering::Relaxed),
         error,
+        live,
+    };
+    let root = PathBuf::from(&root);
+    // Show results as they come in, unless there is a scan to show already.
+    let show_live = {
+        let mut state = STATE.write().unwrap();
+        // A scan of another folder is no use here.
+        if state.tree.as_ref().is_some_and(|t| t.root_path != root) {
+            state.tree = None;
+        }
+        state.tree.is_none()
     };
 
     let finished = std::sync::atomic::AtomicBool::new(false);
     let result = std::thread::scope(|s| {
         s.spawn(|| {
+            let mut ticks = 0u32;
             while !finished.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(100));
-                if sink.add(update(false, None)).is_err() {
+                ticks += 1;
+                // A fresh live view every half second; sizes grow in steps
+                // the eye can follow and rows do not reshuffle constantly.
+                let live = show_live && ticks.is_multiple_of(5) && publish_live(&root, &progress);
+                if sink.add(update(false, None, live)).is_err() {
                     // Dart stopped listening: nobody wants this scan anymore.
                     progress.cancel.store(true, Ordering::Relaxed);
                 }
             }
         });
-        let root = PathBuf::from(&root);
         let previous = if full { None } else { previous_scan(&root) };
-        let mut opts = ScanOptions::default();
+        let mut opts = ScanOptions { live: show_live, ..Default::default() };
         if skip_prompting_folders {
             if let Some(h) = home() {
                 opts.skip = privacy::prompting_folders(&h);
@@ -217,6 +257,7 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
     let error = match result {
         Ok(tree) => {
             let mut state = STATE.write().unwrap();
+            state.live = None;
             // A stopped rescan is worse than the complete scan before it.
             let keep_old = tree.partial
                 && state.tree.as_ref().is_some_and(|t| t.root_path == tree.root_path && !t.partial);
@@ -226,7 +267,10 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
             }
             None
         }
-        Err(e) => Some(e.to_string()),
+        Err(e) => {
+            STATE.write().unwrap().live = None;
+            Some(e.to_string())
+        }
     };
     {
         let mut running = RUNNING.lock().unwrap();
@@ -235,7 +279,7 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
         }
     }
     // Tell the UI first; writing a cache of millions of entries takes a while.
-    let _ = sink.add(update(true, error));
+    let _ = sink.add(update(true, error, false));
     if save {
         // Partial trees are safe to cache: folders the scan did not finish
         // carry no stamp, so the next scan reads them. Only a read lock is
@@ -247,6 +291,17 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
             }
         });
     }
+}
+
+/// Makes the scan so far what the UI shows. False when there is nothing yet.
+fn publish_live(root: &Path, progress: &ScanProgress) -> bool {
+    let Some((tree, pending)) = progress.live.snapshot(root) else { return false };
+    let mut state = STATE.write().unwrap();
+    if state.tree.is_some() {
+        return false;
+    }
+    state.live = Some(Live { tree, pending });
+    true
 }
 
 /// The scan to reuse unchanged directories from. Read from the cache file
@@ -274,24 +329,24 @@ pub fn cancel_scan() {
 #[flutter_rust_bridge::frb(sync)]
 pub fn root_node() -> Option<NodeView> {
     let state = STATE.read().unwrap();
-    let tree = state.tree.as_ref()?;
-    tree.root().map(|_| view(tree, &state.protect, Tree::ROOT))
+    let (tree, pending) = state.shown()?;
+    tree.root().map(|_| view(tree, pending, &state.protect, Tree::ROOT))
 }
 
 /// Children of a node, largest first.
 #[flutter_rust_bridge::frb(sync)]
 pub fn children(id: u32) -> Vec<NodeView> {
     let state = STATE.read().unwrap();
-    let Some(tree) = state.tree.as_ref() else { return vec![] };
-    tree.sorted_children(id).into_iter().map(|c| view(tree, &state.protect, c)).collect()
+    let Some((tree, pending)) = state.shown() else { return vec![] };
+    tree.sorted_children(id).into_iter().map(|c| view(tree, pending, &state.protect, c)).collect()
 }
 
 /// The chain of nodes from the scan root down to `id`, for breadcrumbs.
 #[flutter_rust_bridge::frb(sync)]
 pub fn breadcrumbs(id: u32) -> Vec<NodeView> {
     let state = STATE.read().unwrap();
-    let Some(tree) = state.tree.as_ref() else { return vec![] };
-    tree.ancestors(id).into_iter().map(|c| view(tree, &state.protect, c)).collect()
+    let Some((tree, pending)) = state.shown() else { return vec![] };
+    tree.ancestors(id).into_iter().map(|c| view(tree, pending, &state.protect, c)).collect()
 }
 
 pub fn suggestions() -> Vec<SuggestionView> {
@@ -301,7 +356,7 @@ pub fn suggestions() -> Vec<SuggestionView> {
     rules::suggest(tree, home.as_deref(), &state.protect)
         .into_iter()
         .map(|s| SuggestionView {
-            node: view(tree, &state.protect, s.node),
+            node: view(tree, &[], &state.protect, s.node),
             removal: match s.removal {
                 Removal::Whole => RemovalMode::Whole,
                 Removal::Contents => RemovalMode::Contents,
@@ -338,9 +393,9 @@ pub fn unreadable_folders() -> Vec<String> {
 #[flutter_rust_bridge::frb(sync)]
 pub fn node_at(path: String) -> Option<NodeView> {
     let state = STATE.read().unwrap();
-    let tree = state.tree.as_ref()?;
+    let (tree, pending) = state.shown()?;
     let id = tree.find(Path::new(&path))?;
-    Some(view(tree, &state.protect, id))
+    Some(view(tree, pending, &state.protect, id))
 }
 
 #[flutter_rust_bridge::frb(sync)]
@@ -509,7 +564,7 @@ fn home() -> Option<PathBuf> {
     std::env::var_os(var).filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
-fn view(tree: &Tree, protect: &ProtectList, id: NodeId) -> NodeView {
+fn view(tree: &Tree, pending: &[bool], protect: &ProtectList, id: NodeId) -> NodeView {
     let n = &tree.nodes[id as usize];
     let path = tree.path(id);
     let protection = match n.kind {
@@ -539,5 +594,6 @@ fn view(tree: &Tree, protect: &ProtectList, id: NodeId) -> NodeView {
         modified: n.modified,
         protection,
         has_children: n.kind == NodeKind::Dir && n.children.iter().any(|c| !tree.nodes[*c as usize].removed),
+        scanning: pending.get(id as usize).copied().unwrap_or(false),
     }
 }

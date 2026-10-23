@@ -1,7 +1,8 @@
 //! Benchmark the scanner from the command line:
 //! `cargo run --release --example scan -- <dir> [cache-file]`
 //!
-//! With a cache file, the second run reuses unchanged directories.
+//! With a cache file, the second run reuses unchanged directories. With
+//! `LIVE=1`, a live view is kept and snapshotted twice a second, like the app.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -14,9 +15,29 @@ fn main() {
     let cache_file = args.next().map(PathBuf::from);
     let previous = cache_file.as_deref().and_then(cache::load);
 
+    let live = std::env::var_os("LIVE").is_some();
+    let opts = scan::ScanOptions { live, ..Default::default() };
     let progress = scan::ScanProgress::default();
+    let done = std::sync::atomic::AtomicBool::new(false);
     let start = Instant::now();
-    let tree = scan::scan_with_cache(&root, &Default::default(), &progress, previous.as_ref()).unwrap();
+    let tree = std::thread::scope(|s| {
+        if live {
+            s.spawn(|| {
+                let mut snapshots = 0;
+                while !done.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let t = Instant::now();
+                    if let Some((tree, _)) = progress.live.snapshot(&root) {
+                        snapshots += 1;
+                        eprintln!("snapshot {snapshots}: {} nodes in {:?}", tree.nodes.len(), t.elapsed());
+                    }
+                }
+            });
+        }
+        let tree = scan::scan_with_cache(&root, &opts, &progress, previous.as_ref()).unwrap();
+        done.store(true, std::sync::atomic::Ordering::Relaxed);
+        tree
+    });
     let elapsed = start.elapsed();
     let r = tree.root().unwrap();
     println!(

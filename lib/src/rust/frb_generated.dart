@@ -752,8 +752,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NodeView dco_decode_node_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return NodeView(
       id: dco_decode_u_32(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -764,6 +764,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       modified: dco_decode_i_64(arr[6]),
       protection: dco_decode_protection_state(arr[7]),
       hasChildren: dco_decode_bool(arr[8]),
+      scanning: dco_decode_bool(arr[9]),
     );
   }
 
@@ -807,8 +808,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ScanUpdate dco_decode_scan_update(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return ScanUpdate(
       files: dco_decode_i_64(arr[0]),
       dirs: dco_decode_i_64(arr[1]),
@@ -818,6 +819,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       done: dco_decode_bool(arr[5]),
       partial: dco_decode_bool(arr[6]),
       error: dco_decode_opt_String(arr[7]),
+      live: dco_decode_bool(arr[8]),
     );
   }
 
@@ -1026,6 +1028,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_modified = sse_decode_i_64(deserializer);
     var var_protection = sse_decode_protection_state(deserializer);
     var var_hasChildren = sse_decode_bool(deserializer);
+    var var_scanning = sse_decode_bool(deserializer);
     return NodeView(
       id: var_id,
       name: var_name,
@@ -1036,6 +1039,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       modified: var_modified,
       protection: var_protection,
       hasChildren: var_hasChildren,
+      scanning: var_scanning,
     );
   }
 
@@ -1110,6 +1114,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_done = sse_decode_bool(deserializer);
     var var_partial = sse_decode_bool(deserializer);
     var var_error = sse_decode_opt_String(deserializer);
+    var var_live = sse_decode_bool(deserializer);
     return ScanUpdate(
       files: var_files,
       dirs: var_dirs,
@@ -1119,6 +1124,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       done: var_done,
       partial: var_partial,
       error: var_error,
+      live: var_live,
     );
   }
 
@@ -1339,6 +1345,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_64(self.modified, serializer);
     sse_encode_protection_state(self.protection, serializer);
     sse_encode_bool(self.hasChildren, serializer);
+    sse_encode_bool(self.scanning, serializer);
   }
 
   @protected
@@ -1416,6 +1423,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.done, serializer);
     sse_encode_bool(self.partial, serializer);
     sse_encode_opt_String(self.error, serializer);
+    sse_encode_bool(self.live, serializer);
   }
 
   @protected

@@ -498,7 +498,10 @@ class _NodeRow extends StatelessWidget {
       EntryKind.file => Icons.insert_drive_file_outlined,
       EntryKind.smallFiles => Icons.layers_outlined,
     };
+    // While the scan runs, folders are not fully known yet; removing
+    // waits until it is done.
     final selectable =
+        !model.live &&
         node.kind != EntryKind.smallFiles &&
         node.protection == ProtectionState.none;
 
@@ -511,6 +514,19 @@ class _NodeRow extends StatelessWidget {
       title: Row(
         children: [
           Flexible(child: Text(node.name, overflow: TextOverflow.ellipsis)),
+          if (node.scanning) ...[
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Still scanning',
+              child: SizedBox.square(
+                dimension: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
           if (node.protection == ProtectionState.containsProtected) ...[
             const SizedBox(width: 6),
             Tooltip(
