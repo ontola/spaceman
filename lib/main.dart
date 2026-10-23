@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:spaceman/src/rust/frb_generated.dart';
 
 import 'app_model.dart';
+import 'palette.dart';
 import 'screens/access_intro.dart';
 import 'screens/apps.dart';
 import 'screens/cleanup.dart';
 import 'screens/explorer.dart';
 import 'screens/protected.dart';
 import 'widgets/fly_to.dart';
+import 'widgets/logo.dart';
 import 'widgets/scan_header.dart';
 import 'widgets/selection_bar.dart';
 
@@ -28,13 +30,12 @@ class SpaceManApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF3B6FE0);
     return MaterialApp(
       title: 'SpaceMan',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
+      theme: ThemeData(colorSchemeSeed: seedColor, useMaterial3: true),
       darkTheme: ThemeData(
-        colorSchemeSeed: seed,
+        colorSchemeSeed: seedColor,
         brightness: Brightness.dark,
         useMaterial3: true,
       ),
@@ -98,7 +99,7 @@ class _HomePageState extends State<HomePage> {
             final wide = constraints.maxWidth >= 720;
             final body = Column(
               children: [
-                ScanHeader(model: model),
+                ScanHeader(model: model, showLogo: !wide),
                 const Divider(height: 1),
                 Expanded(child: page),
                 if (_tab < 2) SelectionBar(model: model),
@@ -142,8 +143,8 @@ class _HomePageState extends State<HomePage> {
                     onDestinationSelected: (i) => setState(() => _tab = i),
                     labelType: NavigationRailLabelType.all,
                     leading: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Icon(Icons.rocket_launch, size: 32),
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: SpaceManLogo(size: 48),
                     ),
                     destinations: [
                       for (final (i, d) in _destinations.indexed)
