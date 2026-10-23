@@ -1,5 +1,7 @@
 # SpaceMan
 
+<img src="assets/logo.png" width="128" alt="SpaceMan logo">
+
 Free up disk space, fast. SpaceMan shows where your space goes, suggests what
 can safely be removed and lets you mark things as "do not touch".
 
@@ -67,6 +69,15 @@ After changing anything in `rust/src/api/`, regenerate the bindings:
 ```sh
 cargo install flutter_rust_bridge_codegen cargo-expand
 flutter_rust_bridge_codegen generate
+```
+
+The logo is drawn in code (`lib/widgets/logo.dart`) from the colours in
+`lib/palette.dart`, which the theme and the treemap use too. After changing
+either, regenerate the app icons, Android adaptive icon and splash screens for macOS,
+iOS, Windows and Android:
+
+```sh
+flutter test tool/generate_icons.dart
 ```
 
 ### macOS notes

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../palette.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
 import 'fly_to.dart';
@@ -403,26 +404,17 @@ class _Painter extends CustomPainter {
 
   bool get _dark => theme.brightness == Brightness.dark;
 
-  /// Calm hues spread around the wheel; each top-level item keeps its hue
-  /// for everything inside it, getting lighter (darker in dark mode) with
-  /// depth.
   Color _fill(_Tile t) {
-    final scheme = theme.colorScheme;
     final node = t.node;
     if (node == null || node.kind == EntryKind.smallFiles) {
-      return scheme.surfaceContainerHighest;
+      return theme.colorScheme.surfaceContainerHighest;
     }
-    final hue = (t.hue * 47.0 + 215) % 360;
-    final isFile = node.kind == EntryKind.file;
-    final light = _dark
-        ? 0.30 - t.depth * 0.06 - (isFile ? 0.05 : 0)
-        : 0.72 + t.depth * 0.07 + (isFile ? 0.05 : 0);
-    return HSLColor.fromAHSL(
-      1,
-      hue,
-      isFile ? 0.25 : 0.45,
-      light.clamp(0.12, 0.92),
-    ).toColor();
+    return tileColor(
+      t.hue,
+      depth: t.depth,
+      isFile: node.kind == EntryKind.file,
+      dark: _dark,
+    );
   }
 
   @override
