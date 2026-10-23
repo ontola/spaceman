@@ -32,22 +32,60 @@ class Treemap extends StatefulWidget {
     required this.model,
     required this.folderId,
     required this.onOpen,
+    this.focusPath,
+    this.onHover,
   });
 
   final AppModel model;
   final int folderId;
   final ValueChanged<int> onOpen;
 
+  /// The tile with keyboard focus, drawn with a ring.
+  final String? focusPath;
+
+  /// Tells which item the pointer is on (null when none).
+  final ValueChanged<NodeView?>? onHover;
+
   @override
-  State<Treemap> createState() => _TreemapState();
+  State<Treemap> createState() => TreemapState();
 }
 
-class _TreemapState extends State<Treemap> {
+class TreemapState extends State<Treemap> {
   List<_Tile> _tiles = const [];
   Object? _layoutKey;
   _Tile? _hover;
 
   AppModel get model => widget.model;
+
+  /// The top-level tile next to [fromPath] in direction [d], by geometry;
+  /// the biggest tile when nothing has focus yet.
+  NodeView? neighbor(String? fromPath, AxisDirection d) {
+    final tiles = _tiles.where((t) => t.node != null).toList();
+    if (tiles.isEmpty) return null;
+    final from = tiles.where((t) => t.node!.path == fromPath).firstOrNull;
+    if (from == null) return tiles.first.node;
+    final c = from.rect.center;
+    _Tile? best;
+    var bestScore = double.infinity;
+    for (final t in tiles) {
+      if (t == from) continue;
+      final v = t.rect.center - c;
+      final (along, across) = switch (d) {
+        AxisDirection.right => (v.dx, v.dy),
+        AxisDirection.left => (-v.dx, v.dy),
+        AxisDirection.down => (v.dy, v.dx),
+        AxisDirection.up => (-v.dy, v.dx),
+      };
+      if (along <= 0) continue;
+      // Prefer what is straight ahead over what is merely closer.
+      final score = along + across.abs() * 2;
+      if (score < bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return best?.node;
+  }
 
   /// Lays out again only when the folder, the size or the scan changed.
   List<_Tile> _layout(Size size) {
@@ -217,9 +255,15 @@ class _TreemapState extends State<Treemap> {
                 return MouseRegion(
                   onHover: (e) {
                     final t = _hit(tiles, e.localPosition);
-                    if (t != _hover) setState(() => _hover = t);
+                    if (t != _hover) {
+                      setState(() => _hover = t);
+                      widget.onHover?.call(t?.node);
+                    }
                   },
-                  onExit: (_) => setState(() => _hover = null),
+                  onExit: (_) {
+                    setState(() => _hover = null);
+                    widget.onHover?.call(null);
+                  },
                   child: GestureDetector(
                     onTapUp: (d) {
                       final t = _folderAt(tiles, d.localPosition);
@@ -238,6 +282,7 @@ class _TreemapState extends State<Treemap> {
                       painter: _Painter(
                         tiles: tiles,
                         hover: _hover,
+                        focusPath: widget.focusPath,
                         selected: model.selection.keys.toSet(),
                         theme: theme,
                       ),
@@ -345,12 +390,14 @@ class _Painter extends CustomPainter {
   _Painter({
     required this.tiles,
     required this.hover,
+    required this.focusPath,
     required this.selected,
     required this.theme,
   });
 
   final List<_Tile> tiles;
   final _Tile? hover;
+  final String? focusPath;
   final Set<String> selected;
   final ThemeData theme;
 
@@ -383,6 +430,7 @@ class _Painter extends CustomPainter {
     for (final t in tiles) {
       _paintTile(canvas, t);
     }
+    if (focusPath != null) _paintFocus(canvas, tiles);
     final h = hover;
     if (h != null) {
       canvas.drawRect(
@@ -392,6 +440,26 @@ class _Painter extends CustomPainter {
           ..strokeWidth = 2
           ..color = theme.colorScheme.onSurface,
       );
+    }
+  }
+
+  void _paintFocus(Canvas canvas, List<_Tile> tiles) {
+    for (final t in tiles) {
+      if (t.node?.path == focusPath) {
+        final ring = RRect.fromRectAndRadius(
+          t.rect.deflate(1.5),
+          const Radius.circular(4),
+        );
+        canvas.drawRRect(
+          ring,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3
+            ..color = theme.colorScheme.primary,
+        );
+        return;
+      }
+      _paintFocus(canvas, t.children);
     }
   }
 
@@ -483,6 +551,7 @@ class _Painter extends CustomPainter {
   bool shouldRepaint(_Painter old) =>
       old.tiles != tiles ||
       old.hover != hover ||
+      old.focusPath != focusPath ||
       old.theme != theme ||
       !_sameSet(old.selected, selected);
 

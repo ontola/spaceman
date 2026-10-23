@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_model.dart';
 import '../format.dart';
@@ -30,46 +31,89 @@ class CleanupScreen extends StatelessWidget {
         suggestions.where((s) => categories.contains(s.category)).toList();
     final home = homeDir();
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 16),
-      children: [
-        _Section(
-          title: 'Caches',
-          subtitle: 'Apps and tools download these again when needed.',
-          items: of({
-            SuggestionCategory.cache,
-            SuggestionCategory.logs,
-            SuggestionCategory.trash,
-          }),
-          model: model,
-          home: home,
+    // Backspace or Delete ticks the item under the pointer for removal.
+    void toggleHovered() {
+      final node = _hovered;
+      if (node == null) return;
+      if (node.protection != ProtectionState.none) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('${node.name} is marked do not touch.'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        return;
+      }
+      model.setSelected(node, !model.isSelected(node.path));
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.backspace): toggleHovered,
+        const SingleActivator(LogicalKeyboardKey.delete): toggleHovered,
+        const SingleActivator(LogicalKeyboardKey.backspace, meta: true):
+            toggleHovered,
+      },
+      child: Focus(
+        autofocus: true,
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            _Section(
+              title: 'Caches',
+              subtitle: 'Apps and tools download these again when needed.',
+              items: of({
+                SuggestionCategory.cache,
+                SuggestionCategory.logs,
+                SuggestionCategory.trash,
+              }),
+              model: model,
+              home: home,
+            ),
+            _Section(
+              title: 'Developer build output',
+              subtitle: 'Rebuilt by your tools the next time you build.',
+              items: of({SuggestionCategory.buildOutput}),
+              model: model,
+              home: home,
+              grouped: true,
+            ),
+            _Section(
+              title: 'Large files',
+              subtitle:
+                  'Single files of a gigabyte or more. Check before removing.',
+              items: of({SuggestionCategory.largeOldFile}),
+              model: model,
+              home: home,
+            ),
+            _Section(
+              title: 'Worth a look',
+              subtitle: 'Probably not needed, but check before removing.',
+              items: of({
+                SuggestionCategory.downloads,
+                SuggestionCategory.backups,
+              }),
+              model: model,
+              home: home,
+            ),
+          ],
         ),
-        _Section(
-          title: 'Developer build output',
-          subtitle: 'Rebuilt by your tools the next time you build.',
-          items: of({SuggestionCategory.buildOutput}),
-          model: model,
-          home: home,
-          grouped: true,
-        ),
-        _Section(
-          title: 'Large files',
-          subtitle:
-              'Single files of a gigabyte or more. Check before removing.',
-          items: of({SuggestionCategory.largeOldFile}),
-          model: model,
-          home: home,
-        ),
-        _Section(
-          title: 'Worth a look',
-          subtitle: 'Probably not needed, but check before removing.',
-          items: of({SuggestionCategory.downloads, SuggestionCategory.backups}),
-          model: model,
-          home: home,
-        ),
-      ],
+      ),
     );
   }
+}
+
+/// The item under the pointer, for Backspace and Delete.
+NodeView? _hovered;
+
+/// [path] shortened in the middle to about [max] characters, keeping the
+/// start and the more telling end.
+String _middle(String path, [int max = 72]) {
+  if (path.length <= max) return path;
+  final head = (max * 0.4).round();
+  return '${path.substring(0, head)}…${path.substring(path.length - (max - head - 1))}';
 }
 
 /// A section with a header and total. With [grouped], items of the same
@@ -235,7 +279,7 @@ class _ItemRow extends StatelessWidget {
     };
     final path = _short(s.node.path, home);
     final isFile = s.node.kind == EntryKind.file;
-    return ListTile(
+    final row = ListTile(
       contentPadding: EdgeInsets.only(left: inGroup ? 40 : 16, right: 16),
       onTap: () => model.setSelected(s.node, !model.isSelected(s.node.path)),
       leading: inGroup
@@ -250,7 +294,22 @@ class _ItemRow extends StatelessWidget {
         waitDuration: const Duration(milliseconds: 400),
         child: Text(inGroup ? path : s.title, overflow: TextOverflow.ellipsis),
       ),
-      subtitle: _SizeBar(fraction),
+      subtitle: inGroup
+          ? _SizeBar(fraction)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SizeBar(fraction),
+                Text(
+                  _middle(path),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -273,6 +332,13 @@ class _ItemRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+    return MouseRegion(
+      onEnter: (_) => _hovered = s.node,
+      onExit: (_) {
+        if (_hovered?.path == s.node.path) _hovered = null;
+      },
+      child: row,
     );
   }
 }
