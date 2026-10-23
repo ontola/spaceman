@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_model.dart';
 import '../platform.dart';
+import '../widgets/logo.dart';
 
 /// Shown on macOS before the first scan when SpaceMan lacks Full Disk
 /// Access. Without it, macOS asks separately for every protected folder
@@ -60,11 +61,7 @@ class _AccessIntroState extends State<AccessIntro> with WidgetsBindingObserver {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.shield_outlined,
-                size: 48,
-                color: theme.colorScheme.primary,
-              ),
+              const SpaceManLogo(size: 72),
               const SizedBox(height: 16),
               Text(
                 'SpaceMan needs to look at your whole disk',
@@ -153,11 +150,7 @@ class _AndroidAccess extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.shield_outlined,
-                size: 48,
-                color: theme.colorScheme.primary,
-              ),
+              const SpaceManLogo(size: 72),
               const SizedBox(height: 16),
               Text(
                 'SpaceMan needs to see your files',
