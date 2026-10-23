@@ -8,6 +8,10 @@ import '../palette.dart';
 /// What the logo sits on. The app uses [none]; the app icons use the others.
 enum LogoBackground { none, circle, roundedSquare, square }
 
+/// Which parts to paint. Android's adaptive icons want the backdrop and the
+/// astronaut as separate layers.
+enum LogoLayers { all, backdrop, astronaut }
+
 /// SpaceMan's logo: a minimal astronaut whose visor shows a treemap, bulged
 /// as if seen through the curved glass. Drawn in code from the app's colour
 /// scheme and treemap palette (see palette.dart), so it follows along when
@@ -37,15 +41,24 @@ class SpaceManLogo extends StatelessWidget {
 }
 
 class LogoPainter extends CustomPainter {
-  LogoPainter({required this.scheme, this.background = LogoBackground.none});
+  LogoPainter({
+    required this.scheme,
+    this.background = LogoBackground.none,
+    this.layers = LogoLayers.all,
+  });
 
   final ColorScheme scheme;
   final LogoBackground background;
+  final LogoLayers layers;
+
+  /// The colour of the space around the astronaut, for splash screens.
+  static Color spaceColor(ColorScheme scheme) =>
+      Color.lerp(scheme.primary, Colors.black, 0.84)!;
 
   Color get _rim => Color.lerp(scheme.primary, Colors.black, 0.72)!;
   Color get _suit => Color.lerp(Colors.white, scheme.primary, 0.03)!;
   Color get _suitShade => Color.lerp(Colors.white, scheme.primary, 0.2)!;
-  Color get _space => Color.lerp(scheme.primary, Colors.black, 0.84)!;
+  Color get _space => spaceColor(scheme);
 
   /// The treemap palette, a bit livelier so it reads at icon size.
   static Color _tile(int hue, int depth) {
@@ -76,7 +89,7 @@ class LogoPainter extends CustomPainter {
     canvas.scale(size.width, size.height);
 
     final bg = _backgroundPath();
-    if (bg != null) {
+    if (bg != null && layers != LogoLayers.astronaut) {
       canvas.drawPath(
         bg,
         Paint()
@@ -87,6 +100,10 @@ class LogoPainter extends CustomPainter {
       );
       _stars(canvas);
       canvas.clipPath(bg);
+    }
+    if (layers == LogoLayers.backdrop) {
+      canvas.restore();
+      return;
     }
 
     _body(canvas);
@@ -170,14 +187,18 @@ class LogoPainter extends CustomPainter {
     canvas.drawPath(path, _outline);
   }
 
+  double get _bottom => layers == LogoLayers.astronaut ? 1.6 : 1.02;
+
   void _body(Canvas canvas) {
     final shoulders = Path()
-      ..moveTo(0.08, 1.02)
+      // On its own layer the astronaut is cropped by the launcher's mask,
+      // so let the shoulders run on past the bottom.
+      ..moveTo(0.08, _bottom)
       ..lineTo(0.12, 0.88)
       ..quadraticBezierTo(0.15, 0.76, 0.3, 0.74)
       ..lineTo(0.7, 0.74)
       ..quadraticBezierTo(0.85, 0.76, 0.88, 0.88)
-      ..lineTo(0.92, 1.02)
+      ..lineTo(0.92, _bottom)
       ..close();
     _shape(canvas, shoulders, _suit);
 
@@ -371,7 +392,9 @@ class LogoPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(LogoPainter old) =>
-      old.scheme != scheme || old.background != background;
+      old.scheme != scheme ||
+      old.background != background ||
+      old.layers != layers;
 }
 
 class _LogoTile {

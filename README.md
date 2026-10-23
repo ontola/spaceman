@@ -73,7 +73,8 @@ flutter_rust_bridge_codegen generate
 
 The logo is drawn in code (`lib/widgets/logo.dart`) from the colours in
 `lib/palette.dart`, which the theme and the treemap use too. After changing
-either, regenerate the app icons for macOS, iOS, Windows and Android:
+either, regenerate the app icons, Android adaptive icon and splash screens for macOS,
+iOS, Windows and Android:
 
 ```sh
 flutter test tool/generate_icons.dart

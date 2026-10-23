@@ -99,7 +99,7 @@ class _HomePageState extends State<HomePage> {
             final wide = constraints.maxWidth >= 720;
             final body = Column(
               children: [
-                ScanHeader(model: model),
+                ScanHeader(model: model, showLogo: !wide),
                 const Divider(height: 1),
                 Expanded(child: page),
                 if (_tab < 2) SelectionBar(model: model),
