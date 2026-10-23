@@ -9,14 +9,21 @@ A Flutter app on top of a Rust core, connected with
 [flutter_rust_bridge](https://cjycode.com/flutter_rust_bridge/). macOS comes
 first; Windows, Linux, iOS and Android share the same code.
 
+<p>
+  <img src="docs/screenshots/desktop-treemap.png" width="640" alt="SpaceMan on macOS: treemap of a folder">
+  &nbsp;
+  <img src="docs/screenshots/mobile-list.png" width="200" alt="SpaceMan in a phone-sized window: folder list">
+</p>
+
 ## Features
 
-- **Explore**: drill down through folders, largest first, with sizes and
-  shares of the parent folder.
+- **Explore**: drill down through folders, largest first, as a list with
+  sizes and shares of the parent folder, or as a treemap. Results appear
+  while the scan is still running.
 - **Clean up**: suggestions for caches, build output (`node_modules`, Rust
   `target`, Flutter `build`, Xcode DerivedData, ...), logs, the Trash, old
-  downloads and large files that have not been touched in months. Items that
-  are regenerated automatically are preselected; the rest is "worth a look".
+  downloads and files of a gigabyte or more, grouped by kind. Nothing is
+  ticked for you.
 - **Do not touch**: protect any file or folder. Protected items, and
   everything inside them, are never suggested and cannot be removed.
 - Removing moves items to the Trash, so it can be undone. Folders that apps
