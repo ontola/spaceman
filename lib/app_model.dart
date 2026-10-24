@@ -171,6 +171,13 @@ class AppModel extends ChangeNotifier {
               live = true;
               rootNode = core.rootNode();
               _findCurrent();
+              _refreshSelection();
+              // Now and then, so the list does not reshuffle constantly.
+              final now = DateTime.now();
+              if (now.difference(_liveSuggestionsAt).inSeconds >= 2) {
+                _liveSuggestionsAt = now;
+                refreshSuggestions();
+              }
             }
             if (update.done) {
               live = false;
@@ -203,10 +210,22 @@ class AppModel extends ChangeNotifier {
     core.cancelScan();
   }
 
+  DateTime _liveSuggestionsAt = DateTime(0);
+
   void _reloadTree() {
     rootNode = core.rootNode();
     _findCurrent();
+    _refreshSelection();
     refreshSuggestions();
+  }
+
+  /// Takes the selected items' sizes from the tree shown now: they grow
+  /// while a scan runs, and the finished scan replaces the live view.
+  void _refreshSelection() {
+    for (final path in selection.keys.toList()) {
+      final node = core.nodeAt(path: path);
+      if (node != null) selection[path] = node;
+    }
   }
 
   /// Keeps the user's place if that folder still exists.
@@ -263,6 +282,10 @@ class AppModel extends ChangeNotifier {
 
   int get selectionSize =>
       selectionRoots.fold(0, (sum, node) => sum + node.size);
+
+  /// Part of the selection is still being scanned, so [selectionSize] is
+  /// only a lower bound.
+  bool get selectionGrowing => selectionRoots.any((n) => n.scanning);
 
   /// Whether removing the selection empties the Trash for good.
   bool get selectionEmptiesTrash => suggestions.any(
@@ -322,8 +345,8 @@ class AppModel extends ChangeNotifier {
   /// between the live view of a scan and its result).
   String? _currentPath;
 
-  /// Showing the scan as it runs, not a finished one. Items can not be
-  /// removed yet: their folders are not fully known.
+  /// Showing the scan as it runs, not a finished one. Folders that are
+  /// still being scanned have [core.NodeView.scanning] set.
   bool live = false;
 
   void protect(String path) {

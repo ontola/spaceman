@@ -50,7 +50,7 @@ class _SelectionBarState extends State<SelectionBar> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(formatBytes(node.size)),
+                          Text(formatSize(node.size, growing: node.scanning)),
                           IconButton(
                             tooltip: 'Remove from selection',
                             icon: const Icon(Icons.close, size: 18),
@@ -75,7 +75,8 @@ class _SelectionBarState extends State<SelectionBar> {
                   onPressed: () => setState(() => _expanded = !_expanded),
                   icon: Icon(_expanded ? Icons.expand_more : Icons.expand_less),
                   label: Text(
-                    '${items.length} selected, ${formatBytes(model.selectionSize)}',
+                    '${items.length} selected, '
+                    '${formatSize(model.selectionSize, growing: model.selectionGrowing)}',
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -193,7 +194,10 @@ Future<void> _confirmAndDelete(
 }) async {
   final toTrash = hasTrash && !permanent;
   final items = model.selectionRoots;
-  final total = model.selectionSize;
+  // Folders still being scanned hold at least what was found so far.
+  final total =
+      (model.selectionGrowing ? 'at least ' : '') +
+      formatBytes(model.selectionSize);
   final what = items.length == 1
       ? '"${items.single.name}"'
       : '${items.length} items';
@@ -205,10 +209,10 @@ Future<void> _confirmAndDelete(
       ),
       content: Text(
         toTrash
-            ? 'This frees up to ${formatBytes(total)} once the $trashName is emptied. '
+            ? 'This frees ${model.selectionGrowing ? '' : 'up to '}$total once the $trashName is emptied. '
                   'You can still restore it from the $trashName.'
                   '${model.selectionEmptiesTrash ? '\n\nThe current contents of the $trashName are deleted for good.' : ''}'
-            : 'This frees ${formatBytes(total)}. This cannot be undone.',
+            : 'This frees $total. This cannot be undone.',
       ),
       actions: [
         TextButton(

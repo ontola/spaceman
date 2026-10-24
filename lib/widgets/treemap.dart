@@ -208,7 +208,7 @@ class TreemapState extends State<Treemap> {
   Future<void> _menu(BuildContext context, Offset global, _Tile tile) async {
     final node = tile.node;
     if (node == null) return;
-    final selectable = !model.live && node.protection == ProtectionState.none;
+    final selectable = node.protection == ProtectionState.none;
     final selected = model.isSelected(node.path);
     final choice = await showMenu<String>(
       context: context,
@@ -302,7 +302,8 @@ class TreemapState extends State<Treemap> {
                 ? 'Click a folder to open it. Right-click for more.'
                 : _hover!.node == null
                 ? '${_hover!.more} smaller items, ${formatBytes(_hover!.moreSize)}'
-                : '${_hover!.node!.path}  ·  ${formatBytes(_hover!.node!.size)}',
+                : '${_hover!.node!.path}  ·  '
+                      '${formatSize(_hover!.node!.size, growing: _hover!.node!.scanning)}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -482,8 +483,10 @@ class _Painter extends CustomPainter {
         ? node.name
         : node.name;
     // A folder still being scanned is still growing.
-    final sizeText =
-        '${formatBytes(node?.size ?? t.moreSize)}${node?.scanning ?? false ? ' …' : ''}';
+    final sizeText = formatSize(
+      node?.size ?? t.moreSize,
+      growing: node?.scanning ?? false,
+    );
     final onFill = _dark ? Colors.white : Colors.black87;
     final nested = t.children.isNotEmpty;
     if (nested) {

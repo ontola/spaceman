@@ -11,6 +11,11 @@ String formatBytes(int bytes) {
   return '${value.toStringAsFixed(digits)} ${units[unit]}';
 }
 
+/// [formatBytes] for an item still being scanned, whose size can only
+/// grow: shown as a lower bound.
+String formatSize(int bytes, {bool growing = false}) =>
+    growing ? '≥ ${formatBytes(bytes)}' : formatBytes(bytes);
+
 String formatCount(int n) {
   final s = n.toString();
   final out = StringBuffer();

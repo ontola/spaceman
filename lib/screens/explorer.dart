@@ -119,9 +119,7 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final node = pointerFirst ? _hovered ?? focused : focused ?? _hovered;
     if (node == null) return;
     String? hint;
-    if (model.live) {
-      hint = 'Wait until the scan is done to select items for removal.';
-    } else if (node.protection != ProtectionState.none) {
+    if (node.protection != ProtectionState.none) {
       hint = node.protection == ProtectionState.protected
           ? '${node.name} is marked do not touch.'
           : '${node.name} contains items marked do not touch.';
@@ -530,7 +528,8 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
-              '${formatBytes(current.size)} in ${formatCount(current.fileCount)} files',
+              '${formatSize(current.size, growing: current.scanning)} in '
+              '${formatCount(current.fileCount)} files',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           );
@@ -632,10 +631,7 @@ class _NodeRow extends StatelessWidget {
       EntryKind.file => Icons.insert_drive_file_outlined,
       EntryKind.smallFiles => Icons.layers_outlined,
     };
-    // While the scan runs, folders are not fully known yet; removing
-    // waits until it is done.
     final selectable =
-        !model.live &&
         node.kind != EntryKind.smallFiles &&
         node.protection == ProtectionState.none;
 
@@ -700,7 +696,10 @@ class _NodeRow extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(formatBytes(node.size), style: theme.textTheme.titleSmall),
+                Text(
+                  formatSize(node.size, growing: node.scanning),
+                  style: theme.textTheme.titleSmall,
+                ),
                 Text(
                   '${(share * 100).toStringAsFixed(1)}%',
                   style: theme.textTheme.bodySmall,

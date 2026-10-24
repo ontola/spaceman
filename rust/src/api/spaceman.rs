@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context};
 
 use crate::core::cache;
+use crate::core::firmlinks;
 use crate::core::privacy;
 use crate::core::protect::{ProtectList, Protection};
 use crate::core::rules::{self, Category, Removal, Safety};
@@ -24,6 +25,9 @@ struct State {
     tree: Option<Tree>,
     /// The running scan so far, shown while there is no `tree` yet.
     live: Option<Live>,
+    /// Removed by the user while a scan runs. The scan may already have
+    /// counted them, so they are taken out of its views and its result.
+    removed_during_scan: Vec<PathBuf>,
     protect: ProtectList,
     cache_dir: Option<PathBuf>,
 }
@@ -42,6 +46,24 @@ impl State {
             (Some(t), _) => Some((t, &[])),
             (None, Some(l)) => Some((&l.tree, &l.pending)),
             _ => None,
+        }
+    }
+
+    /// The shown tree, to update after removing something.
+    fn shown_mut(&mut self) -> Option<&mut Tree> {
+        match (&mut self.tree, &mut self.live) {
+            (Some(t), _) => Some(t),
+            (None, Some(l)) => Some(&mut l.tree),
+            _ => None,
+        }
+    }
+}
+
+/// Takes out of `tree` what was removed while it was being scanned.
+fn drop_removed(tree: &mut Tree, removed: &[PathBuf]) {
+    for p in removed {
+        if let Some(id) = tree.find(p) {
+            tree.remove(id);
         }
     }
 }
@@ -237,6 +259,7 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
         if state.tree.as_ref().is_some_and(|t| t.root_path != root) {
             state.tree = None;
         }
+        state.removed_during_scan.clear();
         state.tree.is_none()
     };
 
@@ -257,7 +280,8 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
             }
         });
         let previous = if full { None } else { previous_scan(&root) };
-        let mut opts = ScanOptions { live: show_live, ..Default::default() };
+        let mut opts =
+            ScanOptions { live: show_live, duplicates: firmlinks::duplicates(&root), ..Default::default() };
         if skip_prompting_folders {
             if let Some(h) = home() {
                 opts.skip = privacy::prompting_folders(&h);
@@ -270,9 +294,10 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
 
     let mut save = false;
     let error = match result {
-        Ok(tree) => {
+        Ok(mut tree) => {
             let mut state = STATE.write().unwrap();
             state.live = None;
+            drop_removed(&mut tree, &std::mem::take(&mut state.removed_during_scan));
             // A stopped rescan is worse than the complete scan before it.
             let keep_old = tree.partial
                 && state.tree.as_ref().is_some_and(|t| t.root_path == tree.root_path && !t.partial);
@@ -310,11 +335,12 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
 
 /// Makes the scan so far what the UI shows. False when there is nothing yet.
 fn publish_live(root: &Path, progress: &ScanProgress) -> bool {
-    let Some((tree, pending)) = progress.live.snapshot(root) else { return false };
+    let Some((mut tree, pending)) = progress.live.snapshot(root) else { return false };
     let mut state = STATE.write().unwrap();
     if state.tree.is_some() {
         return false;
     }
+    drop_removed(&mut tree, &state.removed_during_scan);
     state.live = Some(Live { tree, pending });
     true
 }
@@ -366,12 +392,13 @@ pub fn breadcrumbs(id: u32) -> Vec<NodeView> {
 
 pub fn suggestions() -> Vec<SuggestionView> {
     let state = STATE.read().unwrap();
-    let Some(tree) = state.tree.as_ref() else { return vec![] };
+    // While a first scan runs, what it found so far.
+    let Some((tree, pending)) = state.shown() else { return vec![] };
     let home = home();
     rules::suggest(tree, home.as_deref(), &state.protect)
         .into_iter()
         .map(|s| SuggestionView {
-            node: view(tree, &[], &state.protect, s.node),
+            node: view(tree, pending, &state.protect, s.node),
             removal: match s.removal {
                 Removal::Whole => RemovalMode::Whole,
                 Removal::Contents => RemovalMode::Contents,
@@ -505,7 +532,7 @@ fn delete_inner(paths: Vec<String>, permanent: bool, on: &mut dyn FnMut(&Progres
         files_done: 0,
         files_total: {
             let state = STATE.read().unwrap();
-            state.tree.as_ref().map_or(0, |t| {
+            state.shown().map_or(0, |(t, _)| {
                 paths.iter().filter_map(|p| t.find(Path::new(p))).map(|id| t.nodes[id as usize].file_count).sum()
             })
         },
@@ -570,7 +597,10 @@ fn delete_inner(paths: Vec<String>, permanent: bool, on: &mut dyn FnMut(&Progres
             match result {
                 Ok(()) => {
                     let mut state = STATE.write().unwrap();
-                    if let Some(tree) = state.tree.as_mut() {
+                    if RUNNING.lock().unwrap().is_some() {
+                        state.removed_during_scan.push(target.clone());
+                    }
+                    if let Some(tree) = state.shown_mut() {
                         if let Some(id) = tree.find(&target) {
                             let n = &tree.nodes[id as usize];
                             report.freed += n.size as i64;
@@ -591,7 +621,7 @@ fn delete_inner(paths: Vec<String>, permanent: bool, on: &mut dyn FnMut(&Progres
         if any_failed.is_none() && rules::removal_for(&path, home.as_deref()) != Removal::Whole {
             // Small files are not tracked one by one; drop their bucket too.
             let mut state = STATE.write().unwrap();
-            if let Some(tree) = state.tree.as_mut() {
+            if let Some(tree) = state.shown_mut() {
                 let buckets: Vec<NodeId> = tree
                     .find(&path)
                     .map(|id| tree.sorted_children(id))
@@ -624,7 +654,7 @@ fn check_deletable(state: &State, path: &Path) -> anyhow::Result<()> {
     if state.protect.blocks_delete(path) {
         bail!("this item is marked as do not touch");
     }
-    let tree = state.tree.as_ref().context("no scan loaded")?;
+    let (tree, _) = state.shown().context("no scan loaded")?;
     // The tree can lag behind what the user selected (e.g. a rescan that
     // skipped protected folders replaced it), so anything inside the
     // scanned folder may go, even if this scan did not see it.
@@ -724,6 +754,26 @@ fn view(tree: &Tree, pending: &[bool], protect: &ProtectList, id: NodeId) -> Nod
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removed_during_scan_leaves_live_views_and_the_result() {
+        use crate::core::live::LiveTree;
+        let live = LiveTree::default();
+        let root = live.add(None, "".into());
+        let a = live.add(Some(&root), "a".into());
+        let b = live.add(Some(&root), "b".into());
+        a.own_bytes.store(10, Ordering::Relaxed);
+        b.own_bytes.store(5, Ordering::Relaxed);
+        // The scanner counted "a" before the user removed it.
+        let removed = [PathBuf::from("/r/a")];
+        let (mut tree, _) = live.snapshot(Path::new("/r")).unwrap();
+        drop_removed(&mut tree, &removed);
+        assert!(tree.find(Path::new("/r/a")).is_none());
+        assert_eq!(tree.root().unwrap().size, 5);
+        // Gone already, or not in this tree: nothing to do.
+        drop_removed(&mut tree, &removed);
+        assert_eq!(tree.root().unwrap().size, 5);
+    }
 
     #[test]
     fn permanent_removal_counts_files() {
