@@ -94,6 +94,35 @@ Trash. That rules out the Mac App Store; distribute it signed and notarized
 instead. To scan protected locations (Mail, Messages, other users' folders),
 grant SpaceMan *Full Disk Access* in System Settings > Privacy & Security.
 
+#### Installer
+
+`tool/make_dmg.sh` builds `build/SpaceMan.dmg`: a window with SpaceMan and
+the Applications folder to drag it onto. Its background is drawn by
+`tool/generate_icons.dart` and the layout lives in `macos/dmg/settings.py`.
+Without signing settings the app only has an ad-hoc signature and macOS
+blocks the first start (System Settings > Privacy & Security > *Open
+Anyway*). To sign and notarize it locally:
+
+```sh
+xcrun notarytool store-credentials spaceman   # once: Apple ID, team ID, app-specific password
+SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" NOTARY_PROFILE=spaceman tool/make_dmg.sh
+```
+
+CI does the same when these repository secrets are set (Settings > Secrets
+and variables > Actions); without them it still builds an unsigned DMG.
+
+| Secret | What |
+| --- | --- |
+| `MACOS_CERT_P12` | A *Developer ID Application* certificate with its private key, exported from Keychain Access as .p12 and base64 encoded (`base64 -i cert.p12 \| pbcopy`) |
+| `MACOS_CERT_PASSWORD` | The password chosen for that .p12 export |
+| `APPLE_ID` | Apple ID email of a member of the developer team |
+| `APPLE_TEAM_ID` | The 10-character team ID, shown in brackets in the certificate's name |
+| `APPLE_APP_PASSWORD` | An app-specific password for that Apple ID, made at account.apple.com > Sign-In and Security |
+
+A Developer ID certificate can only be created by the team's Account
+Holder: in Xcode, Settings > Accounts > Manage Certificates > + >
+*Developer ID Application*, or at developer.apple.com > Certificates.
+
 ### Windows notes
 
 `flutter run -d windows` or `flutter build windows --release`; the app is
@@ -101,7 +130,8 @@ grant SpaceMan *Full Disk Access* in System Settings > Privacy & Security.
 folder next to it. No permissions are needed. Removed items go to the Recycle
 Bin. Files in OneDrive that are only in the cloud count as taking no space.
 
-CI publishes unsigned macOS and Windows zips as the `dev` prerelease.
+CI publishes the macOS DMG and an unsigned Windows zip as the `dev`
+prerelease.
 
 ### Android notes
 
