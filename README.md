@@ -45,6 +45,33 @@ first; Windows, Linux, iOS and Android share the same code.
   memory stays small even for millions of files. The tree stays in Rust; the
   UI only asks for the rows it shows.
 
+## Alternative to
+
+- [dua](https://github.com/Byron/dua-cli) / [dust](https://github.com/bootandy/dust):
+  fast Rust disk usage tools for the terminal. SpaceMan has the same kind of
+  parallel Rust scanner, but in a GUI that also runs on mobile.
+- [WinDirStat](https://windirstat.net): the classic Windows treemap.
+  SpaceMan adds cleanup suggestions, a scan cache and macOS/Android support.
+- [WizTree](https://diskanalyzer.com): very fast on Windows by reading the
+  NTFS master file table directly. Windows only and closed source.
+- [Disk Inventory X](https://www.derlien.com): treemap for macOS, no longer
+  actively developed.
+- [DaisyDisk](https://daisydiskapp.com): polished paid sunburst for macOS.
+- [GrandPerspective](https://grandperspectiv.sourceforge.net) and
+  [OmniDiskSweeper](https://www.omnigroup.com/more): free macOS disk viewers.
+- [CleanMyMac](https://macpaw.com/cleanmymac): paid macOS cleaner with cleanup
+  suggestions, macOS only.
+- [TreeSize](https://www.jam-software.com/treesize_free) and
+  [SpaceSniffer](https://www.uderzo.it/main_products/space_sniffer/): Windows
+  disk viewers.
+- [ncdu](https://dev.yorhel.nl/ncdu) / [gdu](https://github.com/dundee/gdu):
+  interactive terminal disk usage tools.
+- [QDirStat](https://github.com/shundhammer/qdirstat),
+  [Filelight](https://apps.kde.org/filelight/) and
+  [Baobab](https://apps.gnome.org/Baobab/): Linux desktop disk viewers.
+- [Files by Google](https://files.google.com): cleanup suggestions on
+  Android, Android only.
+
 ## Layout
 
 ```
