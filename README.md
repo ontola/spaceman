@@ -56,6 +56,21 @@ first; Windows, Linux, iOS and Android share the same code.
   NTFS master file table directly. Windows only and closed source.
 - [Disk Inventory X](https://www.derlien.com): treemap for macOS, no longer
   actively developed.
+- [DaisyDisk](https://daisydiskapp.com): polished paid sunburst for macOS.
+- [GrandPerspective](https://grandperspectiv.sourceforge.net) and
+  [OmniDiskSweeper](https://www.omnigroup.com/more): free macOS disk viewers.
+- [CleanMyMac](https://macpaw.com/cleanmymac): paid macOS cleaner with cleanup
+  suggestions, macOS only.
+- [TreeSize](https://www.jam-software.com/treesize_free) and
+  [SpaceSniffer](https://www.uderzo.it/main_products/space_sniffer/): Windows
+  disk viewers.
+- [ncdu](https://dev.yorhel.nl/ncdu) / [gdu](https://github.com/dundee/gdu):
+  interactive terminal disk usage tools.
+- [QDirStat](https://github.com/shundhammer/qdirstat),
+  [Filelight](https://apps.kde.org/filelight/) and
+  [Baobab](https://apps.gnome.org/Baobab/): Linux desktop disk viewers.
+- [Files by Google](https://files.google.com): cleanup suggestions on
+  Android, Android only.
 
 ## Layout
 
