@@ -45,6 +45,18 @@ first; Windows, Linux, iOS and Android share the same code.
   memory stays small even for millions of files. The tree stays in Rust; the
   UI only asks for the rows it shows.
 
+## Alternative to
+
+- [dua](https://github.com/Byron/dua-cli) / [dust](https://github.com/bootandy/dust):
+  fast Rust disk usage tools for the terminal. SpaceMan has the same kind of
+  parallel Rust scanner, but in a GUI that also runs on mobile.
+- [WinDirStat](https://windirstat.net): the classic Windows treemap.
+  SpaceMan adds cleanup suggestions, a scan cache and macOS/Android support.
+- [WizTree](https://diskanalyzer.com): very fast on Windows by reading the
+  NTFS master file table directly. Windows only and closed source.
+- [Disk Inventory X](https://www.derlien.com): treemap for macOS, no longer
+  actively developed.
+
 ## Layout
 
 ```
