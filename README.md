@@ -15,6 +15,26 @@ first; Windows, Linux, iOS and Android share the same code.
   <img src="docs/screenshots/mobile-list.png" width="200" alt="SpaceMan in a phone-sized window: folder list">
 </p>
 
+## Download
+
+<p>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-macOS.zip"><img src="https://img.shields.io/badge/Download-macOS-1f6feb?style=for-the-badge&logo=apple" alt="Download for macOS"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Windows.zip"><img src="https://img.shields.io/badge/Download-Windows-1f6feb?style=for-the-badge&logo=windows" alt="Download for Windows"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Android.apk"><img src="https://img.shields.io/badge/Download-Android-1f6feb?style=for-the-badge&logo=android" alt="Download for Android"></a>
+</p>
+
+The builds are not signed yet:
+
+- **macOS**: unzip, move SpaceMan.app to Applications, and the first time
+  right-click it and choose *Open*.
+- **Windows**: unzip, run `SpaceMan.exe`, and if SmartScreen warns, choose
+  *More info*, *Run anyway*.
+- **Android**: open the APK on your phone and allow installing from this
+  source.
+
+All versions are on the [releases page](https://github.com/ontola/spaceman/releases).
+The newest build of `main` is the [development build](https://github.com/ontola/spaceman/releases/tag/dev).
+
 ## Features
 
 - **Explore**: drill down through folders, largest first, as a list with
@@ -147,6 +167,18 @@ flutter build apk --target-platform android-arm64
 CI publishes `SpaceMan-Android.apk` with every development build. It is
 signed with CI's throwaway debug key, so uninstall the previous build before
 installing a new one.
+
+## Releasing
+
+Set `version` in `pubspec.yaml` (and `rust/Cargo.toml`), merge to `main`, then
+push a matching tag:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+CI builds macOS, Windows and Android and publishes them as release `v0.1.0`,
+which the download buttons above then point at.
 
 ## Ideas
 
