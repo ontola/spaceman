@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -114,10 +115,23 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+      # A tag like v0.1.0 publishes a release, which becomes "latest" and is
+      # what the download links in the README point at. Asset names stay the
+      # same for every version so those links keep working.
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" SpaceMan-macOS.zip SpaceMan-Windows.zip SpaceMan-Android.apk \
+            --title "SpaceMan $GITHUB_REF_NAME" --generate-notes --latest \
+            --notes "Unsigned builds. macOS: the first time, right-click SpaceMan.app and choose Open. Windows: unzip, run SpaceMan.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
       # Pushes and pull requests into main share the "dev" release; a pull
       # request stacked on another branch gets its own, so they don't
       # overwrite each other's builds.
       - name: Publish development build
+        if: "!startsWith(github.ref, 'refs/tags/')"
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
