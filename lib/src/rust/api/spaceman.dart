@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `check_deletable`, `delete_inner`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `save_cache`, `shown`, `to_view`, `view`
+// These functions are ignored because they are not marked as `pub`: `check_deletable`, `delete_inner`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `remove_small_files`, `save_cache`, `shown`, `suggestion_view`, `to_view`, `view`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Live`, `Progress`, `State`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 

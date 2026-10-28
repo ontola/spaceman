@@ -8,7 +8,7 @@ import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
 import 'help.dart';
-import 'selection_bar.dart';
+import 'row_controls.dart';
 
 /// Top bar: which folder is scanned, disk usage and scan controls.
 class ScanHeader extends StatelessWidget {

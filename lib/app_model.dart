@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'paths.dart';
 import 'platform.dart';
 import 'src/rust/api/spaceman.dart' as core;
 
@@ -254,7 +255,7 @@ class AppModel extends ChangeNotifier {
     final roots = <core.NodeView>[];
     String? last;
     for (final p in paths) {
-      if (last != null && _isInside(p, last)) continue;
+      if (last != null && isInside(p, last)) continue;
       roots.add(selection[p]!);
       last = p;
     }
@@ -270,11 +271,6 @@ class AppModel extends ChangeNotifier {
         sug.removal == core.RemovalMode.emptyTrash &&
         selection.containsKey(sug.node.path),
   );
-
-  static bool _isInside(String path, String folder) =>
-      path.length > folder.length &&
-      path.startsWith(folder) &&
-      (path[folder.length] == '/' || path[folder.length] == r'\');
 
   /// Removes the selection, reporting progress to [onProgress] as it goes.
   Future<core.DeleteReport> deleteSelection({
@@ -295,7 +291,7 @@ class AppModel extends ChangeNotifier {
     }
     _reloadTree();
     for (final p in report.deleted) {
-      selection.removeWhere((key, _) => key == p || _isInside(key, p));
+      selection.removeWhere((key, _) => key == p || isInside(key, p));
     }
     notifyListeners();
     return report;
@@ -329,7 +325,7 @@ class AppModel extends ChangeNotifier {
   void protect(String path) {
     core.protectPath(path: path);
     // Protected items can not be removed, so they can not stay ticked.
-    selection.removeWhere((key, _) => key == path || _isInside(key, path));
+    selection.removeWhere((key, _) => key == path || isInside(key, path));
     _protectionChanged();
   }
 

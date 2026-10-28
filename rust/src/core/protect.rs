@@ -111,4 +111,27 @@ mod tests {
         let again = ProtectList::load(file);
         assert_eq!(again.paths(), &[PathBuf::from("/b")]);
     }
+
+    #[test]
+    fn adding_twice_keeps_one_sorted_entry() {
+        let mut list = ProtectList::default();
+        list.add("/b".into()).unwrap();
+        list.add("/a".into()).unwrap();
+        list.add("/b".into()).unwrap();
+        assert_eq!(list.paths(), &[PathBuf::from("/a"), PathBuf::from("/b")]);
+        list.remove(Path::new("/missing")).unwrap();
+        assert_eq!(list.paths().len(), 2);
+    }
+
+    #[test]
+    fn a_corrupt_file_loads_as_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("protected.json");
+        fs::write(&file, b"{ not json").unwrap();
+        let mut list = ProtectList::load(file.clone());
+        assert!(list.paths().is_empty());
+        // And is replaced on the next change.
+        list.add("/a".into()).unwrap();
+        assert_eq!(ProtectList::load(file).paths(), &[PathBuf::from("/a")]);
+    }
 }

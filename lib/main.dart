@@ -120,20 +120,10 @@ class _HomePageState extends State<HomePage> {
                       for (final (i, d) in _destinations.indexed)
                         NavigationDestination(
                           icon: _badge(
-                            i == 2
-                                ? KeyedSubtree(
-                                    key: doNotTouchTarget,
-                                    child: Icon(d.icon),
-                                  )
-                                : Icon(d.icon),
+                            _icon(i, d.icon),
                             i == 1 ? cleanupBadge : null,
                           ),
-                          selectedIcon: i == 2
-                              ? KeyedSubtree(
-                                  key: doNotTouchTarget,
-                                  child: Icon(d.active),
-                                )
-                              : Icon(d.active),
+                          selectedIcon: _icon(i, d.active),
                           label: d.label,
                         ),
                     ],
@@ -174,20 +164,10 @@ class _HomePageState extends State<HomePage> {
                         for (final (i, d) in _destinations.indexed)
                           NavigationRailDestination(
                             icon: _badge(
-                              i == 2
-                                  ? KeyedSubtree(
-                                      key: doNotTouchTarget,
-                                      child: Icon(d.icon),
-                                    )
-                                  : Icon(d.icon),
+                              _icon(i, d.icon),
                               i == 1 ? cleanupBadge : null,
                             ),
-                            selectedIcon: i == 2
-                                ? KeyedSubtree(
-                                    key: doNotTouchTarget,
-                                    child: Icon(d.active),
-                                  )
-                                : Icon(d.active),
+                            selectedIcon: _icon(i, d.active),
                             label: Text(d.label),
                           ),
                       ],
@@ -203,6 +183,12 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+
+  /// The icon of tab [i]. Items marked do not touch fly to the one of
+  /// the Do not touch tab.
+  Widget _icon(int i, IconData icon) => i == 2
+      ? KeyedSubtree(key: doNotTouchTarget, child: Icon(icon))
+      : Icon(icon);
 
   Widget _badge(Widget icon, String? label) =>
       label == null ? icon : Badge(label: Text(label), child: icon);

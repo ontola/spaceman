@@ -3,10 +3,9 @@
 //! (very large files).
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::protect::{ProtectList, Protection};
-use super::tree::{NodeId, NodeKind, Tree};
+use super::tree::{unix_now, NodeId, NodeKind, Tree};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Category {
@@ -163,10 +162,7 @@ const NAME_RULES: &[NameRule] = &[
 ];
 
 pub fn suggest(tree: &Tree, home: Option<&Path>, protect: &ProtectList) -> Vec<Suggestion> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let now = unix_now();
     let mut out = Vec::new();
     let mut stack = vec![Tree::ROOT];
     while let Some(id) = stack.pop() {
@@ -187,12 +183,7 @@ pub fn suggest(tree: &Tree, home: Option<&Path>, protect: &ProtectList) -> Vec<S
                     node: id,
                     size: node.size,
                     title: node.name.to_string(),
-                    reason: match days {
-                        d if d < 0 => "Very large file.".to_string(),
-                        0 => "Very large file, changed today.".to_string(),
-                        1 => "Very large file, last changed yesterday.".to_string(),
-                        d => format!("Very large file, last changed {d} days ago."),
-                    },
+                    reason: large_file_reason(days),
                     category: LargeOldFile,
                     safety: Review,
                     removal: Whole,
@@ -223,12 +214,24 @@ pub fn suggest(tree: &Tree, home: Option<&Path>, protect: &ProtectList) -> Vec<S
 /// How removing `path` should be done: some well-known folders must be
 /// emptied rather than removed themselves.
 pub fn removal_for(path: &Path, home: Option<&Path>) -> Removal {
-    let Some(rel) = home.and_then(|h| path.strip_prefix(h).ok()) else { return Whole };
-    HOME_RULES
-        .iter()
-        .chain(COMMON_HOME_RULES)
-        .find(|r| rel == Path::new(r.rel))
-        .map_or(Whole, |r| r.removal)
+    home_rule(path, home).map_or(Whole, |r| r.removal)
+}
+
+/// The rule for a well-known folder at exactly `path`, if any.
+fn home_rule(path: &Path, home: Option<&Path>) -> Option<&'static HomeRule> {
+    let rel = path.strip_prefix(home?).ok()?;
+    HOME_RULES.iter().chain(COMMON_HOME_RULES).find(|r| rel == Path::new(r.rel))
+}
+
+/// Why a very large file is suggested, given how many days ago it last
+/// changed (negative when unknown).
+fn large_file_reason(days: i64) -> String {
+    match days {
+        d if d < 0 => "Very large file.".to_string(),
+        0 => "Very large file, changed today.".to_string(),
+        1 => "Very large file, last changed yesterday.".to_string(),
+        d => format!("Very large file, last changed {d} days ago."),
+    }
 }
 
 fn match_dir(id: NodeId, path: &Path, name: &str, size: u64, home: Option<&Path>) -> Option<Suggestion> {
@@ -242,12 +245,8 @@ fn match_dir(id: NodeId, path: &Path, name: &str, size: u64, home: Option<&Path>
         safety,
         removal,
     };
-    if let Some(rel) = home.and_then(|h| path.strip_prefix(h).ok()) {
-        for r in HOME_RULES.iter().chain(COMMON_HOME_RULES) {
-            if rel == Path::new(r.rel) {
-                return Some(make(r.title, r.reason, r.category, r.safety, r.removal));
-            }
-        }
+    if let Some(r) = home_rule(path, home) {
+        return Some(make(r.title, r.reason, r.category, r.safety, r.removal));
     }
     for r in NAME_RULES {
         if r.name != name {
@@ -326,5 +325,92 @@ mod tests {
         protect.add(home.join(".npm/_cacache/big.bin")).unwrap();
         let found = suggest(&tree, Some(home), &protect);
         assert!(!found.iter().any(|s| s.path == home.join(".npm/_cacache")));
+    }
+
+    #[test]
+    fn large_file_reasons_say_how_old() {
+        assert_eq!(large_file_reason(-1), "Very large file.");
+        assert_eq!(large_file_reason(0), "Very large file, changed today.");
+        assert_eq!(large_file_reason(1), "Very large file, last changed yesterday.");
+        assert_eq!(large_file_reason(30), "Very large file, last changed 30 days ago.");
+    }
+
+    #[test]
+    fn without_home_only_names_match() {
+        assert_eq!(removal_for(Path::new("/home/u/Downloads"), None), Whole);
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("p/__pycache__/x.pyc"), 101 * 1024 * 1024);
+        write(&tmp.path().join(".npm/_cacache/big.bin"), 51 * 1024 * 1024);
+        let tree = scan(tmp.path(), &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        let found = suggest(&tree, None, &ProtectList::default());
+        let paths: Vec<_> = found.iter().map(|s| s.path.clone()).collect();
+        assert_eq!(paths, vec![tmp.path().join("p/__pycache__")]);
+    }
+
+    #[test]
+    fn small_matches_are_left_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        // Build output needs 100 MB, caches 50 MB.
+        write(&home.join("app/package.json"), 10);
+        write(&home.join("app/node_modules/x.bin"), 60 * 1024 * 1024);
+        write(&home.join(".pub-cache/x.bin"), 40 * 1024 * 1024);
+        let tree = scan(home, &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        assert!(suggest(&tree, Some(home), &ProtectList::default()).is_empty());
+    }
+
+    #[test]
+    fn suggestions_are_largest_first_with_their_details() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path();
+        write(&home.join(".gradle/caches/x.bin"), 60 * 1024 * 1024);
+        write(&home.join("Downloads/a.dmg"), 80 * 1024 * 1024);
+        write(&home.join("venv-project/.venv/lib.bin"), 120 * 1024 * 1024);
+        let tree = scan(home, &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        let found = suggest(&tree, Some(home), &ProtectList::default());
+        let titles: Vec<_> = found.iter().map(|s| s.title.as_str()).collect();
+        assert_eq!(titles, ["Python virtualenv", "Downloads", "Gradle cache"]);
+        assert!(found.windows(2).all(|w| w[0].size >= w[1].size));
+
+        let downloads = &found[1];
+        assert_eq!((downloads.category, downloads.safety, downloads.removal), (Downloads, Review, Contents));
+        assert_eq!(tree.path(downloads.node), home.join("Downloads"));
+        let gradle = &found[2];
+        assert_eq!((gradle.category, gradle.safety, gradle.removal), (Cache, Safe, Whole));
+    }
+
+    #[test]
+    fn very_large_files_are_suggested_unless_protected() {
+        // Built by hand: writing a real gigabyte would make the test slow.
+        use crate::core::tree::{unix_now, Node};
+        let node = |name: &str, parent, kind, size, modified, children: Vec<NodeId>| Node {
+            name: Box::from(name),
+            parent,
+            kind,
+            size,
+            file_count: 1,
+            modified,
+            stamp: 0,
+            children,
+            removed: false,
+        };
+        let tree = Tree {
+            root_path: "/home/u".into(),
+            nodes: vec![
+                node("", None, NodeKind::Dir, 2 * LARGE_FILE, 0, vec![1, 2]),
+                node("film.mkv", Some(0), NodeKind::File, LARGE_FILE, unix_now() - 3 * 86400, vec![]),
+                node("old.iso", Some(0), NodeKind::File, LARGE_FILE - 1, 0, vec![]),
+            ],
+            ..Default::default()
+        };
+        let mut protect = ProtectList::default();
+        let found = suggest(&tree, None, &protect);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, Path::new("/home/u/film.mkv"));
+        assert_eq!((found[0].category, found[0].safety, found[0].removal), (LargeOldFile, Review, Whole));
+        assert_eq!(found[0].reason, "Very large file, last changed 3 days ago.");
+
+        protect.add("/home/u/film.mkv".into()).unwrap();
+        assert!(suggest(&tree, None, &protect).is_empty());
     }
 }
