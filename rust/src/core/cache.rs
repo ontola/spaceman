@@ -129,4 +129,29 @@ mod tests {
         fs::write(&file, b"not a cache").unwrap();
         assert!(load(&file).is_none());
     }
+
+    #[test]
+    fn file_names_are_stable_and_per_root() {
+        let dir = Path::new("/cache");
+        let a = file_for(dir, Path::new("/home/u"));
+        assert_eq!(a, file_for(dir, Path::new("/home/u")));
+        assert_ne!(a, file_for(dir, Path::new("/home/v")));
+        assert!(a.starts_with(dir));
+        // FNV-1a of the path, so caches survive a Rust upgrade.
+        assert_eq!(a.file_name().unwrap(), "scan-840b69ea7b2b135d.bin");
+    }
+
+    #[test]
+    fn missing_or_truncated_files_load_as_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(load(&tmp.path().join("missing.bin")).is_none());
+        let file = tmp.path().join("short.bin");
+        fs::write(&file, &MAGIC[..4]).unwrap();
+        assert!(load(&file).is_none());
+        // The right header with a broken body.
+        let mut bytes = MAGIC.to_vec();
+        bytes.extend_from_slice(b"garbage");
+        fs::write(&file, bytes).unwrap();
+        assert!(load(&file).is_none());
+    }
 }

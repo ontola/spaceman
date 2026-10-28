@@ -44,3 +44,20 @@ pub fn prompting_folders(home: &Path) -> Vec<PathBuf> {
     .map(|rel| home.join(rel))
     .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompting_folders_are_macos_only() {
+        let folders = prompting_folders(Path::new("/Users/u"));
+        if cfg!(target_os = "macos") {
+            assert!(folders.contains(&PathBuf::from("/Users/u/Desktop")));
+            assert!(folders.iter().all(|f| f.starts_with("/Users/u")));
+        } else {
+            assert!(folders.is_empty());
+            assert!(has_full_disk_access());
+        }
+    }
+}
