@@ -756,6 +756,12 @@ mod tests {
 
     const MB: usize = 1024 * 1024;
 
+    /// `rel` (with `/`) under `root`, with the platform's separators, the
+    /// way the core hands out paths.
+    fn native(root: &Path, rel: &str) -> String {
+        rel.split('/').fold(root.to_path_buf(), |p, c| p.join(c)).to_string_lossy().into_owned()
+    }
+
     /// A scanned folder with a state around it, as the app has after a scan.
     struct Fixture {
         tmp: tempfile::TempDir,
@@ -787,7 +793,7 @@ mod tests {
         }
 
         fn path(&self, rel: &str) -> String {
-            self.root().join(rel).to_string_lossy().into_owned()
+            native(&self.root(), rel)
         }
 
         fn delete(&self, rels: &[&str], home: Option<&Path>) -> DeleteReport {
@@ -1056,7 +1062,7 @@ mod tests {
         write(&root.join("a/big.bin"), 2 * MB);
         write(&root.join("a/b/c.bin"), 2 * MB);
         let root_str = root.to_string_lossy().into_owned();
-        let p = |rel: &str| root.join(rel).to_string_lossy().into_owned();
+        let p = |rel: &str| native(&root, rel);
 
         configure(p("../config"), p("../cache"));
         assert!(load_cached_scan(root_str.clone()).is_none());
