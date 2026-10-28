@@ -4,8 +4,9 @@ import 'package:flutter/services.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../paths.dart';
 import '../src/rust/api/spaceman.dart';
-import '../widgets/selection_bar.dart';
+import '../widgets/row_controls.dart';
 import '../widgets/treemap.dart';
 
 /// Drill-down view of where space is used, largest items first.
@@ -584,19 +585,13 @@ class _Breadcrumbs extends StatelessWidget {
               if (i > 0) const Icon(Icons.chevron_right, size: 18),
               TextButton(
                 onPressed: () => onOpen(c.id),
-                child: Text(i == 0 ? _short(c.name) : c.name),
+                child: Text(i == 0 ? lastComponent(c.name) : c.name),
               ),
             ],
           ],
         ),
       ),
     );
-  }
-
-  /// Shows the scan root as its last path component.
-  String _short(String path) {
-    final parts = path.split(RegExp(r'[/\\]')).where((p) => p.isNotEmpty);
-    return parts.isEmpty ? path : parts.last;
   }
 }
 
@@ -680,17 +675,7 @@ class _NodeRow extends StatelessWidget {
           ],
         ],
       ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: fraction.clamp(0, 1),
-            minHeight: 6,
-            backgroundColor: theme.colorScheme.surfaceContainerHighest,
-          ),
-        ),
-      ),
+      subtitle: SizeBar(fraction, padding: const EdgeInsets.only(top: 4)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

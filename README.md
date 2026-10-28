@@ -101,9 +101,15 @@ rust/src/core/      platform-independent core (no Flutter)
   cache.rs          on-disk scan cache
   rules.rs          cleanup suggestions, per platform
   protect.rs        "do not touch" list
+  live.rs           coarse view of a scan while it runs
+  privacy.rs        macOS folders that need Full Disk Access
 rust/src/api/       the API exposed to Dart (flutter_rust_bridge)
 lib/                Flutter UI
+  app_model.dart    app state, forwards actions to the core
+  screens/          Explore, Clean up, Do not touch, Apps (Android)
+  widgets/          header, selection bar, row controls, treemap
 lib/src/rust/       generated bindings, do not edit
+test/               Flutter tests, against a fake core (test/support)
 rust_builder/       cargokit glue that builds the Rust crate per platform
 ```
 
@@ -114,6 +120,7 @@ Windows Visual Studio with the "Desktop development with C++" workload.
 
 ```sh
 flutter run -d macos           # builds the Rust crate automatically
+flutter test                   # UI and app state, no Rust needed
 cd rust && cargo test          # core tests
 cargo run --release --example scan -- ~ /tmp/scan.bin   # benchmark
 ```
