@@ -20,7 +20,7 @@ use std::time::UNIX_EPOCH;
 use rayon::prelude::*;
 
 use super::live::{self, LiveNode, LiveTree};
-use super::tree::{Node, NodeId, NodeKind, Tree};
+use super::tree::{unix_now, Node, NodeId, NodeKind, Tree};
 
 #[derive(Debug, Clone)]
 pub struct ScanOptions {
@@ -132,13 +132,9 @@ pub fn scan_with_cache(
     let cached = ctx.previous.map(|_| Tree::ROOT);
     let at = Place { depth: 0, live: None };
     let dir = walk(root, String::new().into_boxed_str(), &meta, cached, &at, &ctx);
-    let scanned_at = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
     let mut tree = Tree {
         root_path: root.to_path_buf(),
-        scanned_at,
+        scanned_at: unix_now(),
         skipped: opts.skip.clone(),
         partial: progress.cancel.load(Ordering::Relaxed),
         unreadable: {
@@ -195,7 +191,6 @@ fn walk_inner(
     depth: usize,
     ctx: &Ctx,
 ) -> DirTree {
-
     let mut subdirs = match (ctx.previous, cached) {
         (Some(prev), Some(id))
             if out.stamp != 0
@@ -226,14 +221,16 @@ fn walk_inner(
     out
 }
 
+/// A subdirectory still to visit: its path, name, metadata and the node
+/// for it in the previous scan, if any.
 type Subdir = (PathBuf, Box<str>, Metadata, Option<NodeId>);
 
-/// Lists a directory from disk, recording its files in `out` and returning
-/// the subdirectories to descend into.
 fn cancelled(ctx: &Ctx) -> bool {
     ctx.progress.cancel.load(Ordering::Relaxed)
 }
 
+/// Lists a directory from disk, recording its files in `out` and returning
+/// the subdirectories to descend into.
 fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
     let entries = match fs::read_dir(path) {
         Ok(e) => e,
@@ -364,8 +361,9 @@ fn cached_subdirs<'a>(ctx: &Ctx<'a>, path: &Path) -> Option<std::collections::Ha
     )
 }
 
-fn flatten(dir: DirTree, parent: Option<u32>, tree: &mut Tree) -> u32 {
-    let id = tree.nodes.len() as u32;
+/// Appends `dir` and everything below it to `tree`; returns its id.
+fn flatten(dir: DirTree, parent: Option<NodeId>, tree: &mut Tree) -> NodeId {
+    let id = tree.nodes.len() as NodeId;
     tree.nodes.push(Node {
         name: dir.name,
         parent,
@@ -374,12 +372,13 @@ fn flatten(dir: DirTree, parent: Option<u32>, tree: &mut Tree) -> u32 {
         file_count: dir.file_count,
         modified: dir.modified,
         stamp: dir.stamp,
-        children: Vec::with_capacity(dir.dirs.len() + dir.files.len() + 1),
+        // Filled in below, once the children have their ids.
+        children: Vec::new(),
         removed: false,
     });
     let mut children = Vec::with_capacity(dir.dirs.len() + dir.files.len() + 1);
     for (name, size, modified) in dir.files {
-        children.push(tree.nodes.len() as u32);
+        children.push(tree.nodes.len() as NodeId);
         tree.nodes.push(Node {
             name,
             parent: Some(id),
@@ -393,7 +392,7 @@ fn flatten(dir: DirTree, parent: Option<u32>, tree: &mut Tree) -> u32 {
         });
     }
     if dir.small_count > 0 {
-        children.push(tree.nodes.len() as u32);
+        children.push(tree.nodes.len() as NodeId);
         tree.nodes.push(Node {
             name: format!("{} smaller files", dir.small_count).into(),
             parent: Some(id),
@@ -413,20 +412,18 @@ fn flatten(dir: DirTree, parent: Option<u32>, tree: &mut Tree) -> u32 {
     id
 }
 
-fn mtime(meta: &Metadata) -> i64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+fn since_epoch(meta: &Metadata) -> Option<std::time::Duration> {
+    meta.modified().ok()?.duration_since(UNIX_EPOCH).ok()
 }
 
+/// Modification time in seconds, 0 when unknown.
+fn mtime(meta: &Metadata) -> i64 {
+    since_epoch(meta).map_or(0, |d| d.as_secs() as i64)
+}
+
+/// Modification time in nanoseconds, 0 when unknown.
 fn stamp(meta: &Metadata) -> u64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0)
+    since_epoch(meta).map_or(0, |d| d.as_nanos() as u64)
 }
 
 #[cfg(unix)]
@@ -563,5 +560,134 @@ mod tests {
         let tree = scan(root, &ScanOptions::default(), &ScanProgress::default()).unwrap();
         assert_eq!(tree.root().unwrap().file_count, 1);
         assert!(tree.find(&root.join("link")).is_none());
+    }
+
+    #[test]
+    fn root_must_be_a_readable_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("f");
+        write(&file, 1);
+        let p = ScanProgress::default();
+        assert!(matches!(scan(&file, &ScanOptions::default(), &p), Err(ScanError::NotADirectory(_))));
+        let missing = tmp.path().join("missing");
+        let err = scan(&missing, &ScanOptions::default(), &p).unwrap_err();
+        assert!(matches!(err, ScanError::Root(..)));
+        assert!(err.to_string().starts_with("cannot read "));
+    }
+
+    #[test]
+    fn skipped_folders_are_left_out_and_remembered() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join("private/x"), 10);
+        write(&root.join("public/y"), 10);
+        let opts = ScanOptions { skip: vec![root.join("private")], ..Default::default() };
+        let tree = scan(root, &opts, &ScanProgress::default()).unwrap();
+        assert!(tree.find(&root.join("private")).is_none());
+        assert!(tree.find(&root.join("public")).is_some());
+        assert_eq!(tree.skipped, vec![root.join("private")]);
+        assert_eq!(tree.root().unwrap().file_count, 1);
+    }
+
+    #[test]
+    fn min_file_size_decides_what_is_listed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join("a.txt"), 10);
+        write(&root.join("b.txt"), 10);
+        let opts = ScanOptions { min_file_size: 0, ..Default::default() };
+        let tree = scan(root, &opts, &ScanProgress::default()).unwrap();
+        assert!(tree.find(&root.join("a.txt")).is_some());
+        let kids = tree.sorted_children(Tree::ROOT);
+        assert!(kids.iter().all(|c| tree.nodes[*c as usize].kind == NodeKind::File));
+
+        // With the default, both go into one bucket named after the count.
+        let tree = scan(root, &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        let kids = tree.sorted_children(Tree::ROOT);
+        assert_eq!(kids.len(), 1);
+        let bucket = tree.get(kids[0]).unwrap();
+        assert_eq!(bucket.kind, NodeKind::Aggregate);
+        assert_eq!(&*bucket.name, "2 smaller files");
+        assert_eq!(bucket.file_count, 2);
+    }
+
+    #[test]
+    fn rescan_notices_removed_files_and_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join("a/big.bin"), 2 * 1024 * 1024);
+        write(&root.join("b/big.bin"), 2 * 1024 * 1024);
+        let first = scan(root, &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        fs::remove_file(root.join("a/big.bin")).unwrap();
+        fs::remove_dir_all(root.join("b")).unwrap();
+        let again = scan_with_cache(root, &ScanOptions::default(), &ScanProgress::default(), Some(&first)).unwrap();
+        assert!(again.find(&root.join("a/big.bin")).is_none());
+        assert!(again.find(&root.join("b")).is_none());
+        assert_eq!(again.root().unwrap().file_count, 0);
+    }
+
+    #[test]
+    fn a_cache_of_another_root_is_ignored() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("one/x/big.bin"), 2 * 1024 * 1024);
+        write(&tmp.path().join("two/y"), 10);
+        let one = scan(&tmp.path().join("one"), &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        let two_root = tmp.path().join("two");
+        let two = scan_with_cache(&two_root, &ScanOptions::default(), &ScanProgress::default(), Some(&one)).unwrap();
+        assert_eq!(two.root().unwrap().file_count, 1);
+        assert!(two.find(&two_root.join("x")).is_none());
+    }
+
+    #[test]
+    fn live_view_follows_the_scan() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join("a/b/c/d/deep.bin"), 2 * 1024 * 1024);
+        let progress = ScanProgress::default();
+        let opts = ScanOptions { live: true, ..Default::default() };
+        let tree = scan(root, &opts, &progress).unwrap();
+        let (live, pending) = progress.live.snapshot(root).unwrap();
+        assert_eq!(live.root().unwrap().size, tree.root().unwrap().size);
+        // Folders up to live::DEPTH get a node; deeper ones count towards it.
+        assert!(live.find(&root.join("a/b/c")).is_some());
+        assert!(live.find(&root.join("a/b/c/d")).is_none());
+        assert!(pending.iter().all(|p| !p));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hard_links_are_counted_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(&root.join("a/big.bin"), 2 * 1024 * 1024);
+        fs::create_dir_all(root.join("b")).unwrap();
+        fs::hard_link(root.join("a/big.bin"), root.join("b/same.bin")).unwrap();
+        let tree = scan(root, &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        assert_eq!(tree.root().unwrap().file_count, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_folders_are_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let locked = root.join("locked");
+        write(&locked.join("x"), 10);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+        // Root can read anything, so there is nothing to test then.
+        let readable = fs::read_dir(&locked).is_ok();
+        let progress = ScanProgress::default();
+        let tree = scan(root, &ScanOptions::default(), &progress);
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        if readable {
+            return;
+        }
+        let tree = tree.unwrap();
+        assert_eq!(tree.unreadable, vec![locked.clone()]);
+        assert_eq!(progress.errors.load(Ordering::Relaxed), 1);
+        // Never trusted from the cache: the next scan tries again.
+        let id = tree.find(&locked).unwrap();
+        assert_eq!(tree.nodes[id as usize].stamp, 0);
     }
 }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'paths.dart';
 import 'platform.dart';
 import 'src/rust/api/spaceman.dart' as core;
 
@@ -48,8 +49,9 @@ class AppModel extends ChangeNotifier {
   File get _lastRootFile => File('$_configDir/last_root.txt');
   File get _viewFile => File('$_configDir/explorer_view.txt');
 
-  /// Explore shows a treemap instead of the list.
-  bool treemap = false;
+  /// Explore shows a treemap instead of the list (the default until the
+  /// user picks the list).
+  bool treemap = true;
 
   Future<void> setTreemap(bool on) async {
     treemap = on;
@@ -273,7 +275,7 @@ class AppModel extends ChangeNotifier {
     final roots = <core.NodeView>[];
     String? last;
     for (final p in paths) {
-      if (last != null && _isInside(p, last)) continue;
+      if (last != null && isInside(p, last)) continue;
       roots.add(selection[p]!);
       last = p;
     }
@@ -294,11 +296,6 @@ class AppModel extends ChangeNotifier {
         selection.containsKey(sug.node.path),
   );
 
-  static bool _isInside(String path, String folder) =>
-      path.length > folder.length &&
-      path.startsWith(folder) &&
-      (path[folder.length] == '/' || path[folder.length] == r'\');
-
   /// Removes the selection, reporting progress to [onProgress] as it goes.
   Future<core.DeleteReport> deleteSelection({
     bool permanent = false,
@@ -318,7 +315,7 @@ class AppModel extends ChangeNotifier {
     }
     _reloadTree();
     for (final p in report.deleted) {
-      selection.removeWhere((key, _) => key == p || _isInside(key, p));
+      selection.removeWhere((key, _) => key == p || isInside(key, p));
     }
     notifyListeners();
     return report;
@@ -352,7 +349,7 @@ class AppModel extends ChangeNotifier {
   void protect(String path) {
     core.protectPath(path: path);
     // Protected items can not be removed, so they can not stay ticked.
-    selection.removeWhere((key, _) => key == path || _isInside(key, path));
+    selection.removeWhere((key, _) => key == path || isInside(key, path));
     _protectionChanged();
   }
 

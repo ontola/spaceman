@@ -27,4 +27,23 @@ void main() {
     expect(formatAgo(ago(const Duration(minutes: 5)), now: now), '5 min ago');
     expect(formatAgo(ago(const Duration(days: 3)), now: now), '3 days ago');
   });
+
+  test('formatBytes stops at terabytes', () {
+    expect(formatBytes(5 * 1000 * 1000 * 1000 * 1000 * 1000), '5000 TB');
+    expect(formatBytes(1000), '1.0 KB');
+  });
+
+  test('formatCompact', () {
+    expect(formatCompact(950), '950');
+    expect(formatCompact(1500), '1.5K');
+    expect(formatCompact(12000), '12K');
+    expect(formatCompact(8300000), '8.3M');
+    expect(formatCompact(12000000), '12M');
+  });
+
+  test('formatAgo in hours', () {
+    final now = DateTime(2026, 1, 2, 12);
+    final then = now.subtract(const Duration(hours: 3));
+    expect(formatAgo(then.millisecondsSinceEpoch ~/ 1000, now: now), '3 h ago');
+  });
 }

@@ -15,11 +15,32 @@ first; Windows, Linux, iOS and Android share the same code.
   <img src="docs/screenshots/mobile-list.png" width="200" alt="SpaceMan in a phone-sized window: folder list">
 </p>
 
+## Download
+
+<p>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-macOS.zip"><img src="https://img.shields.io/badge/Download-macOS-1f6feb?style=for-the-badge&logo=apple" alt="Download for macOS"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Windows.zip"><img src="https://img.shields.io/badge/Download-Windows-1f6feb?style=for-the-badge&logo=windows" alt="Download for Windows"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Android.apk"><img src="https://img.shields.io/badge/Download-Android-1f6feb?style=for-the-badge&logo=android" alt="Download for Android"></a>
+</p>
+
+The builds are not signed yet:
+
+- **macOS**: unzip, move SpaceMan.app to Applications, and the first time
+  right-click it and choose *Open*.
+- **Windows**: unzip, run `SpaceMan.exe`, and if SmartScreen warns, choose
+  *More info*, *Run anyway*.
+- **Android**: open the APK on your phone and allow installing from this
+  source.
+
+All versions are on the [releases page](https://github.com/ontola/spaceman/releases).
+The newest build of `main` is the [development build](https://github.com/ontola/spaceman/releases/tag/dev).
+
 ## Features
 
-- **Explore**: drill down through folders, largest first, as a list with
-  sizes and shares of the parent folder, or as a treemap. Results appear
-  while the scan is still running.
+- **Explore**: drill down through folders, largest first, as a treemap or
+  as a list with sizes and shares of the parent folder. Results appear
+  while the scan is still running. Go back up with Esc, a swipe, scrolling
+  up or pinching out in the treemap, or pulling the list down.
 - **Clean up**: suggestions for caches, build output (`node_modules`, Rust
   `target`, Flutter `build`, Xcode DerivedData, ...), logs, the Trash, old
   downloads and files of a gigabyte or more, grouped by kind. Nothing is
@@ -45,6 +66,33 @@ first; Windows, Linux, iOS and Android share the same code.
   memory stays small even for millions of files. The tree stays in Rust; the
   UI only asks for the rows it shows.
 
+## Alternative to
+
+- [dua](https://github.com/Byron/dua-cli) / [dust](https://github.com/bootandy/dust):
+  fast Rust disk usage tools for the terminal. SpaceMan has the same kind of
+  parallel Rust scanner, but in a GUI that also runs on mobile.
+- [WinDirStat](https://windirstat.net): the classic Windows treemap.
+  SpaceMan adds cleanup suggestions, a scan cache and macOS/Android support.
+- [WizTree](https://diskanalyzer.com): very fast on Windows by reading the
+  NTFS master file table directly. Windows only and closed source.
+- [Disk Inventory X](https://www.derlien.com): treemap for macOS, no longer
+  actively developed.
+- [DaisyDisk](https://daisydiskapp.com): polished paid sunburst for macOS.
+- [GrandPerspective](https://grandperspectiv.sourceforge.net) and
+  [OmniDiskSweeper](https://www.omnigroup.com/more): free macOS disk viewers.
+- [CleanMyMac](https://macpaw.com/cleanmymac): paid macOS cleaner with cleanup
+  suggestions, macOS only.
+- [TreeSize](https://www.jam-software.com/treesize_free) and
+  [SpaceSniffer](https://www.uderzo.it/main_products/space_sniffer/): Windows
+  disk viewers.
+- [ncdu](https://dev.yorhel.nl/ncdu) / [gdu](https://github.com/dundee/gdu):
+  interactive terminal disk usage tools.
+- [QDirStat](https://github.com/shundhammer/qdirstat),
+  [Filelight](https://apps.kde.org/filelight/) and
+  [Baobab](https://apps.gnome.org/Baobab/): Linux desktop disk viewers.
+- [Files by Google](https://files.google.com): cleanup suggestions on
+  Android, Android only.
+
 ## Layout
 
 ```
@@ -54,9 +102,15 @@ rust/src/core/      platform-independent core (no Flutter)
   cache.rs          on-disk scan cache
   rules.rs          cleanup suggestions, per platform
   protect.rs        "do not touch" list
+  live.rs           coarse view of a scan while it runs
+  privacy.rs        macOS folders that need Full Disk Access
 rust/src/api/       the API exposed to Dart (flutter_rust_bridge)
 lib/                Flutter UI
+  app_model.dart    app state, forwards actions to the core
+  screens/          Explore, Clean up, Do not touch, Apps (Android)
+  widgets/          header, selection bar, row controls, treemap
 lib/src/rust/       generated bindings, do not edit
+test/               Flutter tests, against a fake core (test/support)
 rust_builder/       cargokit glue that builds the Rust crate per platform
 ```
 
@@ -67,6 +121,7 @@ Windows Visual Studio with the "Desktop development with C++" workload.
 
 ```sh
 flutter run -d macos           # builds the Rust crate automatically
+flutter test                   # UI and app state, no Rust needed
 cd rust && cargo test          # core tests
 cargo run --release --example scan -- ~ /tmp/scan.bin   # benchmark
 ```
@@ -120,6 +175,18 @@ flutter build apk --target-platform android-arm64
 CI publishes `SpaceMan-Android.apk` with every development build. It is
 signed with CI's throwaway debug key, so uninstall the previous build before
 installing a new one.
+
+## Releasing
+
+Set `version` in `pubspec.yaml` (and `rust/Cargo.toml`), merge to `main`, then
+push a matching tag:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+CI builds macOS, Windows and Android and publishes them as release `v0.1.0`,
+which the download buttons above then point at.
 
 ## Ideas
 

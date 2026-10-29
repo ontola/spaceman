@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_model.dart';
 import '../format.dart';
 import '../platform.dart';
+import '../widgets/row_controls.dart';
 
 /// Android only: space used by installed apps and their data. That is most
 /// of a phone's storage, and a file scan can not see it, so the sizes come
@@ -184,14 +185,7 @@ class _AppRow extends StatelessWidget {
         children: [
           Text(details, style: theme.textTheme.bodySmall),
           const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: fraction.clamp(0, 1),
-              minHeight: 6,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-            ),
-          ),
+          SizeBar(fraction, padding: EdgeInsets.zero),
         ],
       ),
       trailing: Row(

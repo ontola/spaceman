@@ -3,21 +3,31 @@ import 'package:flutter/services.dart';
 
 import '../app_model.dart';
 import '../format.dart';
+import '../paths.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
-import '../widgets/selection_bar.dart';
+import '../widgets/row_controls.dart';
 
 /// Suggestions for what can be removed, in a few sections: caches, project
 /// build output (grouped by kind) and very large files. Nothing is ticked
 /// up front: the selection is shared with Explore, where it would go
 /// unnoticed.
-class CleanupScreen extends StatelessWidget {
+class CleanupScreen extends StatefulWidget {
   const CleanupScreen({super.key, required this.model});
 
   final AppModel model;
 
   @override
+  State<CleanupScreen> createState() => _CleanupScreenState();
+}
+
+class _CleanupScreenState extends State<CleanupScreen> {
+  /// The item under the pointer, for Space, Backspace and Delete.
+  final _hover = _Hover();
+
+  @override
   Widget build(BuildContext context) {
+    final model = widget.model;
     final suggestions = model.suggestions;
     if (suggestions.isEmpty) {
       return Center(
@@ -33,7 +43,7 @@ class CleanupScreen extends StatelessWidget {
 
     // Space, Backspace or Delete ticks the item under the pointer.
     void toggleHovered() {
-      final node = _hovered;
+      final node = _hover.node;
       if (node == null) return;
       if (node.protection != ProtectionState.none) {
         ScaffoldMessenger.of(context)
@@ -72,6 +82,7 @@ class CleanupScreen extends StatelessWidget {
               }),
               model: model,
               home: home,
+              hover: _hover,
             ),
             _Section(
               title: 'Developer build output',
@@ -79,6 +90,7 @@ class CleanupScreen extends StatelessWidget {
               items: of({SuggestionCategory.buildOutput}),
               model: model,
               home: home,
+              hover: _hover,
               grouped: true,
             ),
             _Section(
@@ -88,6 +100,7 @@ class CleanupScreen extends StatelessWidget {
               items: of({SuggestionCategory.largeOldFile}),
               model: model,
               home: home,
+              hover: _hover,
             ),
             _Section(
               title: 'Worth a look',
@@ -98,6 +111,7 @@ class CleanupScreen extends StatelessWidget {
               }),
               model: model,
               home: home,
+              hover: _hover,
             ),
           ],
         ),
@@ -106,15 +120,9 @@ class CleanupScreen extends StatelessWidget {
   }
 }
 
-/// The item under the pointer, for Backspace and Delete.
-NodeView? _hovered;
-
-/// [path] shortened in the middle to about [max] characters, keeping the
-/// start and the more telling end.
-String _middle(String path, [int max = 72]) {
-  if (path.length <= max) return path;
-  final head = (max * 0.4).round();
-  return '${path.substring(0, head)}…${path.substring(path.length - (max - head - 1))}';
+/// Which item the pointer is on. Rows update it without a rebuild.
+class _Hover {
+  NodeView? node;
 }
 
 /// A section with a header and total. With [grouped], items of the same
@@ -126,6 +134,7 @@ class _Section extends StatefulWidget {
     required this.items,
     required this.model,
     required this.home,
+    required this.hover,
     this.grouped = false,
   });
 
@@ -134,6 +143,7 @@ class _Section extends StatefulWidget {
   final List<SuggestionView> items;
   final AppModel model;
   final String? home;
+  final _Hover hover;
   final bool grouped;
 
   @override
@@ -168,12 +178,14 @@ class _SectionState extends State<_Section> {
                   model: widget.model,
                   s: g.single,
                   home: widget.home,
+                  hover: widget.hover,
                   fraction: g.single.node.size / largest,
                 )
               : _GroupRow(
                   model: widget.model,
                   items: g,
                   home: widget.home,
+                  hover: widget.hover,
                   fraction: _sum(g) / largest,
                 ),
         );
@@ -186,6 +198,7 @@ class _SectionState extends State<_Section> {
             model: widget.model,
             s: s,
             home: widget.home,
+            hover: widget.hover,
             fraction: s.node.size / largest,
           ),
         );
@@ -229,41 +242,15 @@ class _SectionState extends State<_Section> {
   }
 }
 
-/// Size bar, the same as in Explore.
-class _SizeBar extends StatelessWidget {
-  const _SizeBar(this.fraction);
-
-  /// Size relative to the largest row around it.
-  final double fraction;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 4, bottom: 2),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: LinearProgressIndicator(
-        value: fraction.isFinite ? fraction.clamp(0, 1) : 0,
-        minHeight: 6,
-        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-      ),
-    ),
-  );
-}
-
 int _sum(List<SuggestionView> items) =>
     items.fold<int>(0, (sum, s) => sum + s.node.size);
-
-/// [path] relative to the home folder, as `~/...`.
-String _short(String path, String? home) =>
-    home != null && path.startsWith('$home/')
-    ? '~${path.substring(home.length)}'
-    : path;
 
 class _ItemRow extends StatelessWidget {
   const _ItemRow({
     required this.model,
     required this.s,
     required this.home,
+    required this.hover,
     required this.fraction,
     this.inGroup = false,
   });
@@ -271,6 +258,7 @@ class _ItemRow extends StatelessWidget {
   final AppModel model;
   final SuggestionView s;
   final String? home;
+  final _Hover hover;
   final double fraction;
 
   /// Inside a group the kind is already said; show just the location.
@@ -284,7 +272,7 @@ class _ItemRow extends StatelessWidget {
       RemovalMode.contents => 'The folder stays, its contents are removed.',
       RemovalMode.whole => null,
     };
-    final path = _short(s.node.path, home);
+    final path = homeRelative(s.node.path, home);
     final isFile = s.node.kind == EntryKind.file;
     final row = ListTile(
       contentPadding: EdgeInsets.only(left: inGroup ? 40 : 16, right: 16),
@@ -302,13 +290,13 @@ class _ItemRow extends StatelessWidget {
         child: Text(inGroup ? path : s.title, overflow: TextOverflow.ellipsis),
       ),
       subtitle: inGroup
-          ? _SizeBar(fraction)
+          ? SizeBar(fraction)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SizeBar(fraction),
+                SizeBar(fraction),
                 Text(
-                  _middle(path),
+                  middleEllipsis(path),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -341,9 +329,9 @@ class _ItemRow extends StatelessWidget {
       ),
     );
     return MouseRegion(
-      onEnter: (_) => _hovered = s.node,
+      onEnter: (_) => hover.node = s.node,
       onExit: (_) {
-        if (_hovered?.path == s.node.path) _hovered = null;
+        if (hover.node?.path == s.node.path) hover.node = null;
       },
       child: row,
     );
@@ -357,12 +345,14 @@ class _GroupRow extends StatefulWidget {
     required this.model,
     required this.items,
     required this.home,
+    required this.hover,
     required this.fraction,
   });
 
   final AppModel model;
   final List<SuggestionView> items;
   final String? home;
+  final _Hover hover;
   final double fraction;
 
   @override
@@ -413,7 +403,7 @@ class _GroupRowState extends State<_GroupRow> {
               ),
             ],
           ),
-          subtitle: _SizeBar(widget.fraction),
+          subtitle: SizeBar(widget.fraction),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -464,6 +454,7 @@ class _GroupRowState extends State<_GroupRow> {
                         model: model,
                         s: s,
                         home: widget.home,
+                        hover: widget.hover,
                         // Within the group, relative to its biggest folder.
                         fraction: s.node.size / items.first.node.size,
                         inGroup: true,
