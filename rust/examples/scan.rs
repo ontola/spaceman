@@ -3,11 +3,13 @@
 //!
 //! With a cache file, the second run reuses unchanged directories. With
 //! `LIVE=1`, a live view is kept and snapshotted twice a second, like the app.
+//! Like the app, folders seen twice through macOS firmlinks are counted once,
+//! unless `FIRMLINKS_TWICE=1` is set. `SKIP=dir:dir` leaves folders out.
 
 use std::path::PathBuf;
 use std::time::Instant;
 
-use rust_lib_spaceman::core::{cache, scan};
+use rust_lib_spaceman::core::{cache, firmlinks, scan};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -16,7 +18,10 @@ fn main() {
     let previous = cache_file.as_deref().and_then(cache::load);
 
     let live = std::env::var_os("LIVE").is_some();
-    let opts = scan::ScanOptions { live, ..Default::default() };
+    let duplicates =
+        if std::env::var_os("FIRMLINKS_TWICE").is_some() { Vec::new() } else { firmlinks::duplicates(&root) };
+    let skip = std::env::var("SKIP").map(|v| v.split(':').map(PathBuf::from).collect()).unwrap_or_default();
+    let opts = scan::ScanOptions { live, duplicates, skip, ..Default::default() };
     let progress = scan::ScanProgress::default();
     let done = std::sync::atomic::AtomicBool::new(false);
     let start = Instant::now();
