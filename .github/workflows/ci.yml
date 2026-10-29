@@ -40,6 +40,15 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    env:
+      # Optional: with these the DMG is signed and notarized, without them it
+      # only carries Flutter's ad-hoc signature. See "Releasing on macOS" in
+      # the README.
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,15 +56,29 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: flutter build macos --release
-      # ditto keeps the bundle's symlinks and permissions, which a plain
-      # artifact upload of the .app folder loses.
-      - name: Zip app
-        run: ditto -c -k --keepParent build/macos/Build/Products/Release/SpaceMan.app SpaceMan-macOS.zip
+      - name: Import signing certificate
+        if: env.MACOS_CERT_P12 != ''
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(uuidgen)
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -f pkcs12 -k "$keychain" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+      # Builds the app, signs and notarizes it when the secrets are there,
+      # and packs it into the drag-to-Applications installer window.
+      - run: tool/make_dmg.sh
+      - run: mv build/SpaceMan.dmg SpaceMan-macOS.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: SpaceMan-macOS
-          path: SpaceMan-macOS.zip
+          path: SpaceMan-macOS.dmg
 
   windows:
     runs-on: windows-latest
@@ -139,6 +162,6 @@ jobs:
           TAG: ${{ (github.event_name == 'push' || github.base_ref == 'main') && 'dev' || format('dev-pr-{0}', github.event.number) }}
         run: |
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" SpaceMan-macOS.zip SpaceMan-Windows.zip SpaceMan-Android.apk --prerelease --target "$SHA" \
+          gh release create "$TAG" SpaceMan-macOS.dmg SpaceMan-Windows.zip SpaceMan-Android.apk --prerelease --target "$SHA" \
             --title "Development build" \
-            --notes "Latest builds ($SHA). Unsigned. macOS: the first time, right-click SpaceMan.app and choose Open. Windows: unzip, run SpaceMan.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
+            --notes "Latest builds ($SHA). macOS: open SpaceMan-macOS.dmg and drag SpaceMan onto Applications. If macOS says it cannot check the app for malware, open System Settings, Privacy & Security, and choose Open Anyway. Windows: unzip, run SpaceMan.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."

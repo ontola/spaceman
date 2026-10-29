@@ -155,5 +155,71 @@ void main() {
 
     // A large copy for the README.
     await _write('assets/logo.png', _render(512, LogoBackground.circle));
+
+    // Background of the macOS installer window (tool/make_dmg.sh).
+    for (final (suffix, scale) in [('', 1), ('@2x', 2)]) {
+      await _write('macos/dmg/background$suffix.png', _dmgBackground(scale));
+    }
   });
+}
+
+/// The DMG window is [dmgWidth] x [dmgHeight] points with the app and the
+/// Applications folder at [dmgAppIcon] and [dmgApplicationsIcon]; keep these
+/// in sync with macos/dmg/settings.py.
+const dmgWidth = 640, dmgHeight = 400;
+const dmgAppIcon = Offset(170, 190), dmgApplicationsIcon = Offset(470, 190);
+
+/// A light window (Finder draws the icon labels in black) with an arrow from
+/// the app to Applications and a strip of treemap tiles along the bottom.
+Future<Uint8List> _dmgBackground(int scale) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder)..scale(scale.toDouble());
+  final size = Size(dmgWidth.toDouble(), dmgHeight.toDouble());
+  canvas.drawRect(
+    Offset.zero & size,
+    Paint()
+      ..shader = ui.Gradient.linear(Offset.zero, Offset(0, size.height), [
+        _scheme.surface,
+        _scheme.surfaceContainer,
+      ]),
+  );
+
+  // Treemap strip: tiles of shrinking width, like a sorted folder.
+  const stripTop = 352.0, gap = 3.0;
+  var x = 0.0, width = 150.0;
+  for (var i = 0; x < size.width; i++) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(x + gap / 2, stripTop, width - gap, 60),
+        const Radius.circular(4),
+      ),
+      Paint()..color = tileColor(i, dark: false),
+    );
+    x += width;
+    width = (width * 0.72).clamp(28.0, 150.0);
+  }
+
+  // Arrow between the icons, clear of their 128 point frames and labels.
+  final arrowPaint = Paint()
+    ..color = _scheme.primary
+    ..strokeWidth = 6
+    ..strokeCap = StrokeCap.round
+    ..style = PaintingStyle.stroke;
+  final start = Offset(dmgAppIcon.dx + 88, dmgAppIcon.dy - 8);
+  final end = Offset(dmgApplicationsIcon.dx - 88, dmgApplicationsIcon.dy - 8);
+  canvas.drawLine(start, end, arrowPaint);
+  canvas.drawPath(
+    Path()
+      ..moveTo(end.dx - 18, end.dy - 18)
+      ..lineTo(end.dx, end.dy)
+      ..lineTo(end.dx - 18, end.dy + 18),
+    arrowPaint..strokeJoin = StrokeJoin.round,
+  );
+
+  final image = await recorder.endRecording().toImage(
+    dmgWidth * scale,
+    dmgHeight * scale,
+  );
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  return data!.buffer.asUint8List();
 }
