@@ -37,9 +37,10 @@ The newest build of `main` is the [development build](https://github.com/ontola/
 
 ## Features
 
-- **Explore**: drill down through folders, largest first, as a list with
-  sizes and shares of the parent folder, or as a treemap. Results appear
-  while the scan is still running.
+- **Explore**: drill down through folders, largest first, as a treemap or
+  as a list with sizes and shares of the parent folder. Results appear
+  while the scan is still running. Go back up with Esc, a swipe, scrolling
+  up or pinching out in the treemap, or pulling the list down.
 - **Clean up**: suggestions for caches, build output (`node_modules`, Rust
   `target`, Flutter `build`, Xcode DerivedData, ...), logs, the Trash, old
   downloads and files of a gigabyte or more, grouped by kind. Nothing is

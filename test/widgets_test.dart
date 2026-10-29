@@ -43,8 +43,13 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  /// Starts the app on a [width] wide window with a finished scan.
-  Future<void> start(WidgetTester tester, {double width = 1600}) async {
+  /// Starts the app on a [width] wide window with a finished scan, showing
+  /// the treemap (the default) or the [list].
+  Future<void> start(
+    WidgetTester tester, {
+    double width = 1600,
+    bool list = false,
+  }) async {
     tester.view.physicalSize = Size(width, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -53,6 +58,7 @@ void main() {
       core.scan!.add(scanUpdate(files: 5, elapsedMs: 1500, done: true));
       await pumpEventQueue();
     });
+    if (list) model.treemap = false;
     await tester.pumpWidget(SpaceManApp(model: model));
     await tester.pumpAndSettle();
   }
@@ -100,7 +106,7 @@ void main() {
 
   group('explore', () {
     testWidgets('lists the largest items first', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       final names = tester
           .widgetList<ListTile>(find.byType(ListTile))
           .map((t) => ((t.title as Row).children.first as Flexible).child)
@@ -113,7 +119,7 @@ void main() {
     });
 
     testWidgets('opens folders and goes back up', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await tester.tap(find.text('Movies'));
       await tester.pumpAndSettle();
       expect(find.text('film.mkv'), findsOneWidget);
@@ -139,7 +145,7 @@ void main() {
     });
 
     testWidgets('ticking items shows the selection bar', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await tester.tap(
         find.descendant(of: rowOf('Movies'), matching: find.byType(Checkbox)),
       );
@@ -159,7 +165,7 @@ void main() {
     });
 
     testWidgets('the lock marks an item do not touch', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await tester.tap(
         find.descendant(
           of: rowOf('code'),
@@ -184,7 +190,7 @@ void main() {
     });
 
     testWidgets('the treemap draws the folder', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await tester.tap(find.byTooltip('Treemap'));
       await tester.pumpAndSettle();
       expect(model.treemap, isTrue);
@@ -203,8 +209,6 @@ void main() {
 
   testWidgets('arrows and the menu work in the treemap', (tester) async {
     await start(tester);
-    await tester.tap(find.byTooltip('Treemap'));
-    await tester.pumpAndSettle();
     final map = tester.state<TreemapState>(find.byType(Treemap));
     // Nothing focused yet: the biggest tile; then by position.
     expect(map.neighbor(null, AxisDirection.right)?.path, at('Movies'));
@@ -233,6 +237,58 @@ void main() {
     await tester.tap(find.text('Do not touch').last);
     await tester.pumpAndSettle();
     expect(core.protectedList, [at('Movies/film.mkv')]);
+  });
+
+  group('going up', () {
+    testWidgets('the treemap is the default view', (tester) async {
+      await start(tester);
+      expect(find.byType(Treemap), findsOneWidget);
+    });
+
+    testWidgets('Esc goes up a folder', (tester) async {
+      await start(tester, list: true);
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(model.currentId, 0);
+    });
+
+    testWidgets('pulling the list past its top goes up', (tester) async {
+      await start(tester, list: true);
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      // A short pull springs back.
+      await tester.drag(find.byType(ListView), const Offset(0, 30));
+      await tester.pumpAndSettle();
+      expect(model.currentId, core.idOf(at('Movies')));
+      await tester.drag(find.byType(ListView), const Offset(0, 200));
+      await tester.pumpAndSettle();
+      expect(model.currentId, 0);
+    });
+
+    testWidgets('pinch and scroll in the treemap', (tester) async {
+      await start(tester);
+      final box = tester.getRect(find.byType(Treemap));
+      final onMovies = box.topLeft + const Offset(40, 40);
+      final mouse = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(mouse.addPointer(location: onMovies));
+      await tester.sendEventToBinding(mouse.hover(onMovies));
+      // Pinching in opens the folder under the pointer.
+      final trackpad = TestPointer(2, PointerDeviceKind.trackpad);
+      await tester.sendEventToBinding(trackpad.panZoomStart(onMovies));
+      await tester.sendEventToBinding(
+        trackpad.panZoomUpdate(onMovies, scale: 1.5),
+      );
+      await tester.sendEventToBinding(trackpad.panZoomEnd());
+      await tester.pumpAndSettle();
+      expect(model.currentId, core.idOf(at('Movies')));
+
+      // Turning the wheel up goes back.
+      await tester.sendEventToBinding(mouse.scroll(const Offset(0, -100)));
+      await tester.pumpAndSettle();
+      expect(model.currentId, 0);
+    });
   });
 
   group('scan header', () {
@@ -377,7 +433,7 @@ void main() {
     }
 
     testWidgets('moves to the trash after confirming', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await selectMovies(tester);
       await tester.tap(find.text('Move to Trash'));
       await tester.pumpAndSettle();
@@ -403,7 +459,7 @@ void main() {
         freed: 0,
         failed: [FailedDelete(path: paths.single, reason: 'in use')],
       );
-      await start(tester);
+      await start(tester, list: true);
       await selectMovies(tester);
       await tester.tap(find.text('Delete permanently'));
       await tester.pumpAndSettle();
@@ -420,7 +476,7 @@ void main() {
     });
 
     testWidgets('the selection bar lists and protects items', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await selectMovies(tester);
       await tester.tap(find.text('1 selected, 7.0 MB'));
       await tester.pumpAndSettle();
