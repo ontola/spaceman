@@ -39,9 +39,13 @@ class _HelpDialog extends StatelessWidget {
       ('Enter', 'Open the folder'),
       ('Space', 'Select or unselect the item under the mouse'),
       ('Backspace / Delete', 'Select or unselect the focused item'),
-      (Platform.isMacOS ? 'Cmd+[  Cmd+↑' : 'Alt+←  Alt+↑', 'Up one folder'),
+      (
+        Platform.isMacOS ? 'Esc  Cmd+[  Cmd+↑' : 'Esc  Alt+←  Alt+↑',
+        'Up one folder (Esc also closes dialogs)',
+      ),
+      ('Scroll, pinch', 'Treemap: up or out goes up, down or in opens'),
+      ('Pull down', 'At the top of the list: up one folder'),
       ('?', 'This help'),
-      ('Esc', 'Close dialogs'),
     ];
 
     return AlertDialog(

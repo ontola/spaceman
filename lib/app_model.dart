@@ -49,8 +49,9 @@ class AppModel extends ChangeNotifier {
   File get _lastRootFile => File('$_configDir/last_root.txt');
   File get _viewFile => File('$_configDir/explorer_view.txt');
 
-  /// Explore shows a treemap instead of the list.
-  bool treemap = false;
+  /// Explore shows a treemap instead of the list (the default until the
+  /// user picks the list).
+  bool treemap = true;
 
   Future<void> setTreemap(bool on) async {
     treemap = on;

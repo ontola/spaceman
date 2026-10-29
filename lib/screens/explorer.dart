@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +15,10 @@ import '../widgets/treemap.dart';
 ///
 /// Folders slide like a navigation stack. Going up: swipe right (two
 /// fingers on a trackpad, one on a touch screen), the mouse back button,
-/// Cmd+[, Cmd+Up, Alt+Up, Alt+Left, or Left in the list.
+/// Esc, Cmd+[, Cmd+Up, Alt+Up, Alt+Left, or Left in the list. In the
+/// treemap, scrolling up or pinching out goes up too, and scrolling down or
+/// pinching in opens the folder under the pointer. In the list, pulling
+/// down past the top goes up.
 ///
 /// The keyboard moves a focus ring (arrows), opens folders (Enter, or Right
 /// in the list) and ticks items for removal (Backspace or Delete; without
@@ -148,6 +153,7 @@ class _ExplorerScreenState extends State<ExplorerScreen>
 
   @override
   void dispose() {
+    _pull.dispose();
     _t.dispose();
     super.dispose();
   }
@@ -253,7 +259,57 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     }
   }
 
+  // Scrolling and pinching in the treemap, which has nothing to scroll.
+  // One gesture moves one folder: a trackpad gesture from touch to lift,
+  // a burst of mouse wheel ticks with no pause in between.
+
+  double _treemapScroll = 0;
+  bool _treemapStepped = false;
+  Duration _wheelAt = Duration.zero;
+
+  /// Points of scrolling that move one folder.
+  static const _scrollStep = 60.0;
+
+  void _treemapStep({required bool up}) {
+    _treemapStepped = true;
+    if (up) {
+      _up();
+      return;
+    }
+    // The pointer is on the deepest tile; open the folder around it that
+    // sits directly in this one.
+    final node = _hovered;
+    if (node == null) return;
+    final crumbs = model.breadcrumbs(node.id);
+    final i = crumbs.indexWhere((c) => c.id == model.currentId);
+    if (i < 0 || i + 1 >= crumbs.length) return;
+    final child = crumbs[i + 1];
+    if (child.kind == EntryKind.dir && child.hasChildren) _go(child.id);
+  }
+
+  /// [dy] is positive for scrolling up (fingers moving down with natural
+  /// scrolling, or the wheel turned up).
+  void _treemapScrollBy(double dy) {
+    if (_treemapStepped) return;
+    _treemapScroll += dy;
+    if (_treemapScroll.abs() >= _scrollStep) {
+      _treemapStep(up: _treemapScroll > 0);
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent e) {
+    if (!model.treemap || e is! PointerScrollEvent) return;
+    if (e.timeStamp - _wheelAt > const Duration(milliseconds: 300)) {
+      _treemapScroll = 0;
+      _treemapStepped = false;
+    }
+    _wheelAt = e.timeStamp;
+    _treemapScrollBy(-e.scrollDelta.dy);
+  }
+
   void _onPanZoomStart(PointerPanZoomStartEvent e) {
+    _treemapScroll = 0;
+    _treemapStepped = false;
     _panLocked = _panRejected = false;
     _panDx = 0;
     _panTime = e.timeStamp;
@@ -261,6 +317,13 @@ class _ExplorerScreenState extends State<ExplorerScreen>
   }
 
   void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (model.treemap && !_panLocked && !_treemapStepped) {
+      if (e.scale < 0.8 || e.scale > 1.25) {
+        _treemapStep(up: e.scale < 1);
+      } else if (e.scale == 1) {
+        _treemapScrollBy(e.panDelta.dy);
+      }
+    }
     if (_panRejected) return;
     if (!_panLocked) {
       // Decide once, after a little movement: mostly sideways to the right
@@ -308,6 +371,7 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final crumbs = model.breadcrumbs(model.currentId);
     return CallbackShortcuts(
       bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _up,
         const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): _up,
         const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
         // Explorer's shortcuts on Windows and Linux.
@@ -336,6 +400,7 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           onPointerDown: (e) {
             if (e.buttons & kBackMouseButton != 0) _up();
           },
+          onPointerSignal: _onPointerSignal,
           onPointerPanZoomStart: _onPanZoomStart,
           onPointerPanZoomUpdate: _onPanZoomUpdate,
           onPointerPanZoomEnd: _onPanZoomEnd,
@@ -523,7 +588,7 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     // Protected items are out of the way: they live in the Do not touch tab.
     final items = _items(current.id);
     final largest = items.isEmpty ? 1 : items.first.size;
-    return ListView.builder(
+    final list = ListView.builder(
       key: PageStorageKey(id),
       itemCount: items.length + 1,
       itemBuilder: (context, i) {
@@ -555,6 +620,63 @@ class _ExplorerScreenState extends State<ExplorerScreen>
         );
       },
     );
+    if (id != model.currentId || _parentId == null) return list;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: _onListScroll,
+          child: list,
+        ),
+        // "Pull to go up", growing clearer as the pull nears the threshold.
+        Positioned(
+          top: 8,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: ValueListenableBuilder(
+              valueListenable: _pull,
+              builder: (context, pull, _) {
+                if (pull <= 0) return const SizedBox.shrink();
+                return Opacity(
+                  opacity: (pull / _pullToGoUp).clamp(0.0, 1.0),
+                  child: Center(
+                    child: Chip(
+                      avatar: const Icon(Icons.arrow_upward, size: 16),
+                      label: Text(_pullHint(pull)),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// How far the list is pulled down past its top by the current drag.
+  final _pull = ValueNotifier(0.0);
+  static const _pullToGoUp = 80.0;
+
+  String _pullHint(double pull) =>
+      pull >= _pullToGoUp ? 'Release to go up' : 'Pull to go up';
+
+  /// Pulling past the top of the list goes up a folder on release. Clamping
+  /// lists (desktop, Android) report the pull as overscroll; bouncing ones
+  /// (iOS) move past their start.
+  bool _onListScroll(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    final m = n.metrics;
+    if (n is OverscrollNotification && n.dragDetails != null) {
+      if (n.overscroll < 0) _pull.value -= n.overscroll;
+    } else if (n is ScrollUpdateNotification && n.dragDetails != null) {
+      _pull.value = math.max(0.0, m.minScrollExtent - m.pixels);
+    } else if (n is ScrollEndNotification) {
+      if (n.dragDetails != null && _pull.value >= _pullToGoUp) _up();
+      _pull.value = 0;
+    }
+    return false;
   }
 }
 
