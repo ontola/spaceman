@@ -265,13 +265,14 @@ class _ExplorerScreenState extends State<ExplorerScreen>
 
   double _treemapScroll = 0;
   bool _treemapStepped = false;
+  double _wheelScroll = 0;
+  bool _wheelStepped = false;
   Duration _wheelAt = Duration.zero;
 
   /// Points of scrolling that move one folder.
   static const _scrollStep = 60.0;
 
   void _treemapStep({required bool up}) {
-    _treemapStepped = true;
     if (up) {
       _up();
       return;
@@ -287,24 +288,20 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     if (child.kind == EntryKind.dir && child.hasChildren) _go(child.id);
   }
 
-  /// [dy] is positive for scrolling up (fingers moving down with natural
-  /// scrolling, or the wheel turned up).
-  void _treemapScrollBy(double dy) {
-    if (_treemapStepped) return;
-    _treemapScroll += dy;
-    if (_treemapScroll.abs() >= _scrollStep) {
-      _treemapStep(up: _treemapScroll > 0);
-    }
-  }
-
   void _onPointerSignal(PointerSignalEvent e) {
     if (!model.treemap || e is! PointerScrollEvent) return;
     if (e.timeStamp - _wheelAt > const Duration(milliseconds: 300)) {
-      _treemapScroll = 0;
-      _treemapStepped = false;
+      _wheelScroll = 0;
+      _wheelStepped = false;
     }
     _wheelAt = e.timeStamp;
-    _treemapScrollBy(-e.scrollDelta.dy);
+    if (_wheelStepped) return;
+    // Turning the wheel up scrolls up: negative dy.
+    _wheelScroll -= e.scrollDelta.dy;
+    if (_wheelScroll.abs() >= _scrollStep) {
+      _wheelStepped = true;
+      _treemapStep(up: _wheelScroll > 0);
+    }
   }
 
   void _onPanZoomStart(PointerPanZoomStartEvent e) {
@@ -318,10 +315,14 @@ class _ExplorerScreenState extends State<ExplorerScreen>
 
   void _onPanZoomUpdate(PointerPanZoomUpdateEvent e) {
     if (model.treemap && !_panLocked && !_treemapStepped) {
+      // With natural scrolling, fingers moving down (positive dy) scroll up.
+      _treemapScroll += e.scale == 1 ? e.panDelta.dy : 0;
       if (e.scale < 0.8 || e.scale > 1.25) {
+        _treemapStepped = true;
         _treemapStep(up: e.scale < 1);
-      } else if (e.scale == 1) {
-        _treemapScrollBy(e.panDelta.dy);
+      } else if (_treemapScroll.abs() >= _scrollStep) {
+        _treemapStepped = true;
+        _treemapStep(up: _treemapScroll > 0);
       }
     }
     if (_panRejected) return;

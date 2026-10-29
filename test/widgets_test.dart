@@ -433,7 +433,7 @@ void main() {
     }
 
     testWidgets('moves to the trash after confirming', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await selectMovies(tester);
       await tester.tap(find.text('Move to Trash'));
       await tester.pumpAndSettle();
@@ -459,7 +459,7 @@ void main() {
         freed: 0,
         failed: [FailedDelete(path: paths.single, reason: 'in use')],
       );
-      await start(tester);
+      await start(tester, list: true);
       await selectMovies(tester);
       await tester.tap(find.text('Delete permanently'));
       await tester.pumpAndSettle();
@@ -476,7 +476,7 @@ void main() {
     });
 
     testWidgets('the selection bar lists and protects items', (tester) async {
-      await start(tester);
+      await start(tester, list: true);
       await selectMovies(tester);
       await tester.tap(find.text('1 selected, 7.0 MB'));
       await tester.pumpAndSettle();
