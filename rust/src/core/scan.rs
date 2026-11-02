@@ -31,13 +31,16 @@ pub struct ScanOptions {
     /// Directories not to enter, e.g. privacy-protected folders that would
     /// make macOS show a permission prompt.
     pub skip: Vec<PathBuf>,
+    /// Directories that the scan also reaches by another path, and so
+    /// must not count again (see [`super::firmlinks`]).
+    pub duplicates: Vec<PathBuf>,
     /// Keep a live view of the top folders in [`ScanProgress::live`].
     pub live: bool,
 }
 
 impl Default for ScanOptions {
     fn default() -> Self {
-        Self { min_file_size: 1024 * 1024, same_filesystem: true, skip: Vec::new(), live: false }
+        Self { min_file_size: 1024 * 1024, same_filesystem: true, skip: Vec::new(), duplicates: Vec::new(), live: false }
     }
 }
 
@@ -188,7 +191,7 @@ fn walk_inner(
     depth: usize,
     ctx: &Ctx,
 ) -> DirTree {
-    let subdirs = match (ctx.previous, cached) {
+    let mut subdirs = match (ctx.previous, cached) {
         (Some(prev), Some(id))
             if out.stamp != 0
                 && prev.nodes[id as usize].stamp == out.stamp
@@ -198,6 +201,9 @@ fn walk_inner(
         }
         _ => read_listing(path, &mut out, ctx),
     };
+    if !ctx.opts.duplicates.is_empty() {
+        subdirs.retain(|(p, ..)| !ctx.opts.duplicates.contains(p));
+    }
 
     if let Some(l) = live {
         l.own_bytes.fetch_add(out.size, Ordering::Relaxed);
@@ -228,6 +234,9 @@ fn cancelled(ctx: &Ctx) -> bool {
 fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
     let entries = match fs::read_dir(path) {
         Ok(e) => e,
+        // Removed since its parent was listed, e.g. moved to the trash
+        // while the scan runs: it is simply not there.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
         Err(_) => {
             ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
             let mut unreadable = ctx.progress.unreadable.lock().unwrap();
@@ -252,9 +261,13 @@ fn read_listing(path: &Path, out: &mut DirTree, ctx: &Ctx) -> Vec<Subdir> {
         }
         // Never follows links. On Windows this comes straight from the
         // directory listing, so files don't have to be opened one by one.
-        let Ok(meta) = entry.metadata() else {
-            ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
-            continue;
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => {
+                ctx.progress.errors.fetch_add(1, Ordering::Relaxed);
+                continue;
+            }
         };
         let name: Box<str> = entry.file_name().to_string_lossy().into();
         let ft = meta.file_type();
@@ -500,6 +513,27 @@ mod tests {
         assert!(kinds.contains(&NodeKind::Aggregate));
         assert_eq!(tree.path(big), root.join("a/big.bin"));
         assert_eq!(progress.files.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn duplicates_are_counted_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // Like /Users and /System/Volumes/Data/Users: one folder, two paths.
+        write(&root.join("Users/me/big.bin"), 2 * 1024 * 1024);
+        write(&root.join("Data/Users/me/big.bin"), 2 * 1024 * 1024);
+        write(&root.join("Data/only-here.bin"), 3 * 1024 * 1024);
+        let opts = ScanOptions { duplicates: vec![root.join("Data/Users")], ..Default::default() };
+        let tree = scan(root, &opts, &ScanProgress::default()).unwrap();
+        assert!(tree.find(&root.join("Data/Users")).is_none());
+        assert!(tree.find(&root.join("Data/only-here.bin")).is_some());
+        assert_eq!(tree.root().unwrap().file_count, 2);
+
+        // Also when the listing comes from an earlier scan that had it.
+        let first = scan(root, &ScanOptions::default(), &ScanProgress::default()).unwrap();
+        let again = scan_with_cache(root, &opts, &ScanProgress::default(), Some(&first)).unwrap();
+        assert!(again.find(&root.join("Data/Users")).is_none());
+        assert_eq!(again.root().unwrap().file_count, 2);
     }
 
     #[test]

@@ -10,6 +10,11 @@ void main() {
     expect(formatBytes(12345678901), '12.3 GB');
   });
 
+  test('formatSize marks growing sizes as a lower bound', () {
+    expect(formatSize(1500), '1.5 KB');
+    expect(formatSize(1500, growing: true), '≥ 1.5 KB');
+  });
+
   test('formatCount groups thousands', () {
     expect(formatCount(7), '7');
     expect(formatCount(1234567), '1,234,567');

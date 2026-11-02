@@ -218,7 +218,13 @@ class _SectionState extends State<_Section> {
                 child: Text(widget.title, style: theme.textTheme.titleMedium),
               ),
               const Spacer(),
-              Text(formatBytes(total), style: theme.textTheme.titleMedium),
+              Text(
+                formatSize(
+                  total,
+                  growing: widget.items.any((s) => s.node.scanning),
+                ),
+                style: theme.textTheme.titleMedium,
+              ),
             ],
           ),
         ),
@@ -305,7 +311,7 @@ class _ItemRow extends StatelessWidget {
           SizedBox(
             width: 80,
             child: Text(
-              formatBytes(s.node.size),
+              formatSize(s.node.size, growing: s.node.scanning),
               textAlign: TextAlign.end,
               style: theme.textTheme.titleSmall,
             ),
@@ -404,7 +410,10 @@ class _GroupRowState extends State<_GroupRow> {
               SizedBox(
                 width: 80,
                 child: Text(
-                  formatBytes(_sum(items)),
+                  formatSize(
+                    _sum(items),
+                    growing: items.any((s) => s.node.scanning),
+                  ),
                   textAlign: TextAlign.end,
                   style: theme.textTheme.titleSmall,
                 ),
