@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `check_deletable`, `delete_inner`, `home`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `remove_small_files`, `save_cache`, `shown`, `suggestion_view`, `to_view`, `view`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Live`, `Progress`, `State`
+// These functions are ignored because they are not marked as `pub`: `check_deletable`, `delete_inner`, `home`, `new`, `previous_scan`, `publish_live`, `remove_from_disk`, `remove_permanently`, `remove_small_files`, `reset`, `save_cache`, `should_stop`, `shown`, `suggestion_view`, `to_view`, `view`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `DeleteControl`, `Live`, `Progress`, `State`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 /// Loads settings (the protect list) from `config_dir`, and keeps scan
@@ -109,8 +109,15 @@ Stream<DeleteProgress> deletePathsWithProgress({
   permanent: permanent,
 );
 
-/// Stops a running [`delete_paths_with_progress`].
+/// Stops a running [`delete_paths_with_progress`], also when paused.
 void cancelDelete() => RustLib.instance.api.crateApiSpacemanCancelDelete();
+
+/// Pauses a running [`delete_paths_with_progress`] after the file being
+/// removed (or, when moving to the trash, after the item being moved).
+void pauseDelete() => RustLib.instance.api.crateApiSpacemanPauseDelete();
+
+/// Continues a removal paused with [`pause_delete`].
+void resumeDelete() => RustLib.instance.api.crateApiSpacemanResumeDelete();
 
 /// How far a removal is. The last one carries the report.
 class DeleteProgress {

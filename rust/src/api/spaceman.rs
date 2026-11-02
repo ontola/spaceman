@@ -433,7 +433,35 @@ pub fn unprotect_path(path: String) -> anyhow::Result<()> {
     STATE.write().unwrap().protect.remove(Path::new(&path)).context("saving protect list")
 }
 
-static DELETE_CANCEL: AtomicBool = AtomicBool::new(false);
+/// Lets the UI stop or pause a running removal.
+#[flutter_rust_bridge::frb(ignore)]
+struct DeleteControl {
+    cancel: AtomicBool,
+    pause: AtomicBool,
+}
+
+impl DeleteControl {
+    const fn new() -> Self {
+        Self { cancel: AtomicBool::new(false), pause: AtomicBool::new(false) }
+    }
+
+    /// Clears both flags, for a new removal.
+    fn reset(&self) {
+        self.cancel.store(false, Ordering::Relaxed);
+        self.pause.store(false, Ordering::Relaxed);
+    }
+
+    /// Waits while paused, then tells whether the removal should stop.
+    /// Called between files, so a pause holds after the file at hand.
+    fn should_stop(&self) -> bool {
+        while self.pause.load(Ordering::Relaxed) && !self.cancel.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        self.cancel.load(Ordering::Relaxed)
+    }
+}
+
+static DELETE_CONTROL: DeleteControl = DeleteControl::new();
 
 /// Moves paths to the trash (or deletes them when `permanent` is set, or on
 /// platforms without a trash). Protected paths are always refused.
@@ -441,7 +469,7 @@ static DELETE_CANCEL: AtomicBool = AtomicBool::new(false);
 /// Well-known folders such as the caches folder or Downloads are emptied
 /// instead of removed, and the trash itself is emptied for good.
 pub fn delete_paths(paths: Vec<String>, permanent: bool) -> DeleteReport {
-    delete_inner(&STATE, home().as_deref(), &DELETE_CANCEL, paths, permanent, &mut |_| {})
+    delete_inner(&STATE, home().as_deref(), &DELETE_CONTROL, paths, permanent, &mut |_| {})
 }
 
 /// Like [`delete_paths`], streaming progress about ten times a second. The
@@ -449,7 +477,7 @@ pub fn delete_paths(paths: Vec<String>, permanent: bool) -> DeleteReport {
 /// being removed; what is gone by then stays gone.
 pub fn delete_paths_with_progress(paths: Vec<String>, permanent: bool, sink: StreamSink<DeleteProgress>) {
     let mut last = Instant::now();
-    let report = delete_inner(&STATE, home().as_deref(), &DELETE_CANCEL, paths, permanent, &mut |p| {
+    let report = delete_inner(&STATE, home().as_deref(), &DELETE_CONTROL, paths, permanent, &mut |p| {
         // Item boundaries always; file by file at most every 100 ms.
         if p.at_item_start || last.elapsed() >= Duration::from_millis(100) {
             last = Instant::now();
@@ -467,10 +495,23 @@ pub fn delete_paths_with_progress(paths: Vec<String>, permanent: bool, sink: Str
     });
 }
 
-/// Stops a running [`delete_paths_with_progress`].
+/// Stops a running [`delete_paths_with_progress`], also when paused.
 #[flutter_rust_bridge::frb(sync)]
 pub fn cancel_delete() {
-    DELETE_CANCEL.store(true, Ordering::Relaxed);
+    DELETE_CONTROL.cancel.store(true, Ordering::Relaxed);
+}
+
+/// Pauses a running [`delete_paths_with_progress`] after the file being
+/// removed (or, when moving to the trash, after the item being moved).
+#[flutter_rust_bridge::frb(sync)]
+pub fn pause_delete() {
+    DELETE_CONTROL.pause.store(true, Ordering::Relaxed);
+}
+
+/// Continues a removal paused with [`pause_delete`].
+#[flutter_rust_bridge::frb(sync)]
+pub fn resume_delete() {
+    DELETE_CONTROL.pause.store(false, Ordering::Relaxed);
 }
 
 #[flutter_rust_bridge::frb(ignore)]
@@ -499,17 +540,17 @@ impl Progress {
 }
 
 /// Removes `paths`, reporting to `on` as it goes. Works on `state` rather
-/// than the global one, and takes `home` and the `cancel` flag as given, so
+/// than the global one, and takes `home` and the stop/pause flags as given, so
 /// tests can run it in isolation.
 fn delete_inner(
     state: &RwLock<State>,
     home: Option<&Path>,
-    cancel: &AtomicBool,
+    ctl: &DeleteControl,
     paths: Vec<String>,
     permanent: bool,
     on: &mut dyn FnMut(&Progress),
 ) -> DeleteReport {
-    cancel.store(false, Ordering::Relaxed);
+    ctl.reset();
     let mut report = DeleteReport { deleted: vec![], freed: 0, failed: vec![] };
     let mut progress = Progress {
         done: 0,
@@ -530,7 +571,7 @@ fn delete_inner(
     let mut paths = paths;
     paths.sort_by_key(|p| rules::removal_for(Path::new(p), home) != Removal::EmptyTrash);
     for p in paths {
-        if cancel.load(Ordering::Relaxed) {
+        if ctl.should_stop() {
             break;
         }
         let path = PathBuf::from(&p);
@@ -564,7 +605,7 @@ fn delete_inner(
         let permanent = permanent || removal == Removal::EmptyTrash;
         let mut any_failed = None;
         for target in targets {
-            if cancel.load(Ordering::Relaxed) {
+            if ctl.should_stop() {
                 any_failed = Some("stopped".to_string());
                 break;
             }
@@ -577,7 +618,7 @@ fn delete_inner(
                 }
             }
             let files_before = progress.files_done;
-            let result = remove_from_disk(&target, permanent, cancel, &mut || {
+            let result = remove_from_disk(&target, permanent, ctl, &mut || {
                 progress.files_done += 1;
                 progress.at_item_start = false;
                 on(&progress);
@@ -665,21 +706,21 @@ fn check_deletable(state: &State, home: Option<&Path>, path: &Path) -> anyhow::R
 
 /// `on_file` is called for every file removed permanently.
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-fn remove_from_disk(path: &Path, permanent: bool, cancel: &AtomicBool, on_file: &mut dyn FnMut()) -> anyhow::Result<()> {
+fn remove_from_disk(path: &Path, permanent: bool, ctl: &DeleteControl, on_file: &mut dyn FnMut()) -> anyhow::Result<()> {
     if permanent {
-        return remove_permanently(path, cancel, on_file);
+        return remove_permanently(path, ctl, on_file);
     }
     trash::delete(path).context("moving to trash")
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-fn remove_from_disk(path: &Path, _permanent: bool, cancel: &AtomicBool, on_file: &mut dyn FnMut()) -> anyhow::Result<()> {
-    remove_permanently(path, cancel, on_file)
+fn remove_from_disk(path: &Path, _permanent: bool, ctl: &DeleteControl, on_file: &mut dyn FnMut()) -> anyhow::Result<()> {
+    remove_permanently(path, ctl, on_file)
 }
 
 /// Removes a file or a whole folder, file by file so progress can be shown
 /// and a stop takes effect quickly. Never follows links.
-fn remove_permanently(path: &Path, cancel: &AtomicBool, on_file: &mut dyn FnMut()) -> anyhow::Result<()> {
+fn remove_permanently(path: &Path, ctl: &DeleteControl, on_file: &mut dyn FnMut()) -> anyhow::Result<()> {
     let meta = std::fs::symlink_metadata(path)?;
     if !meta.is_dir() {
         std::fs::remove_file(path)?;
@@ -687,10 +728,10 @@ fn remove_permanently(path: &Path, cancel: &AtomicBool, on_file: &mut dyn FnMut(
         return Ok(());
     }
     for entry in std::fs::read_dir(path)? {
-        if cancel.load(Ordering::Relaxed) {
+        if ctl.should_stop() {
             bail!("stopped");
         }
-        remove_permanently(&entry?.path(), cancel, on_file)?;
+        remove_permanently(&entry?.path(), ctl, on_file)?;
     }
     std::fs::remove_dir(path)?;
     Ok(())
@@ -766,7 +807,7 @@ mod tests {
     struct Fixture {
         tmp: tempfile::TempDir,
         state: RwLock<State>,
-        cancel: AtomicBool,
+        ctl: DeleteControl,
     }
 
     impl Fixture {
@@ -785,7 +826,7 @@ mod tests {
                 protect: ProtectList::load(tmp.path().join("config/protected.json")),
                 cache_dir: Some(tmp.path().join("cache")),
             };
-            Self { tmp, state: RwLock::new(state), cancel: AtomicBool::new(false) }
+            Self { tmp, state: RwLock::new(state), ctl: DeleteControl::new() }
         }
 
         fn root(&self) -> PathBuf {
@@ -798,7 +839,7 @@ mod tests {
 
         fn delete(&self, rels: &[&str], home: Option<&Path>) -> DeleteReport {
             let paths = rels.iter().map(|r| self.path(r)).collect();
-            delete_inner(&self.state, home, &self.cancel, paths, true, &mut |_| {})
+            delete_inner(&self.state, home, &self.ctl, paths, true, &mut |_| {})
         }
 
         fn root_size(&self) -> u64 {
@@ -815,7 +856,7 @@ mod tests {
             fs::write(dir.join(f), b"1").unwrap();
         }
         let mut files = 0;
-        remove_permanently(&dir, &AtomicBool::new(false), &mut || files += 1).unwrap();
+        remove_permanently(&dir, &DeleteControl::new(), &mut || files += 1).unwrap();
         assert_eq!(files, 3);
         assert!(!dir.exists());
     }
@@ -825,7 +866,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("d");
         write(&dir.join("a/x"), 1);
-        let err = remove_permanently(&dir, &AtomicBool::new(true), &mut || {}).unwrap_err();
+        let ctl = DeleteControl::new();
+        ctl.cancel.store(true, Ordering::Relaxed);
+        let err = remove_permanently(&dir, &ctl, &mut || {}).unwrap_err();
         assert_eq!(err.to_string(), "stopped");
         assert!(dir.join("a/x").exists());
     }
@@ -866,7 +909,7 @@ mod tests {
         let home = f.root().join("home");
         let mut paths = vec![f.root().to_string_lossy().into_owned(), f.path("home")];
         paths.push(outside.to_string_lossy().into_owned());
-        let report = delete_inner(&f.state, Some(&home), &f.cancel, paths, true, &mut |_| {});
+        let report = delete_inner(&f.state, Some(&home), &f.ctl, paths, true, &mut |_| {});
         let reasons: Vec<_> = report.failed.iter().map(|e| e.reason.as_str()).collect();
         assert_eq!(
             reasons,
@@ -903,7 +946,7 @@ mod tests {
         let f = Fixture::new(&[("Downloads/setup.dmg", 2 * MB), ("Downloads/a.txt", 10), ("Downloads/b.txt", 10)]);
         let home = f.root();
         let paths = vec![f.path("Downloads")];
-        let report = delete_inner(&f.state, Some(&home), &f.cancel, paths, true, &mut |_| {});
+        let report = delete_inner(&f.state, Some(&home), &f.ctl, paths, true, &mut |_| {});
         assert_eq!(report.deleted, vec![f.path("Downloads")]);
         assert!(f.root().join("Downloads").is_dir());
         assert_eq!(fs::read_dir(f.root().join("Downloads")).unwrap().count(), 0);
@@ -927,12 +970,12 @@ mod tests {
         }
         // Protected inside: the folder itself is refused as a whole...
         let paths = vec![f.path(".cache")];
-        let report = delete_inner(&f.state, Some(&home), &f.cancel, paths, true, &mut |_| {});
+        let report = delete_inner(&f.state, Some(&home), &f.ctl, paths, true, &mut |_| {});
         assert_eq!(report.failed.len(), 1);
         // ...but once allowed, its contents go except for our cache.
         f.state.write().unwrap().protect.remove(&f.root().join(".cache/keep")).unwrap();
         let paths = vec![f.path(".cache")];
-        let report = delete_inner(&f.state, Some(&home), &f.cancel, paths, true, &mut |_| {});
+        let report = delete_inner(&f.state, Some(&home), &f.ctl, paths, true, &mut |_| {});
         assert!(report.failed.is_empty());
         assert!(f.root().join(".cache/app/x.bin").exists());
         assert!(!f.root().join(".cache/keep").exists());
@@ -945,9 +988,9 @@ mod tests {
         // first progress report.
         let paths = vec![f.path("a"), f.path("b")];
         let mut seen = 0;
-        let report = delete_inner(&f.state, None, &f.cancel, paths, true, &mut |_| {
+        let report = delete_inner(&f.state, None, &f.ctl, paths, true, &mut |_| {
             seen += 1;
-            f.cancel.store(true, Ordering::Relaxed);
+            f.ctl.cancel.store(true, Ordering::Relaxed);
         });
         assert_eq!(seen, 1);
         assert_eq!(report.failed.len(), 1);
@@ -956,11 +999,57 @@ mod tests {
     }
 
     #[test]
+    fn a_paused_removal_waits_until_resumed() {
+        let f = Fixture::new(&[("a/x", 10), ("b/y", 10)]);
+        let paths = vec![f.path("a"), f.path("b")];
+        let start = Instant::now();
+        let report = std::thread::scope(|s| {
+            let mut paused = false;
+            let report = delete_inner(&f.state, None, &f.ctl, paths, true, &mut |_| {
+                if !paused {
+                    paused = true;
+                    f.ctl.pause.store(true, Ordering::Relaxed);
+                    s.spawn(|| {
+                        std::thread::sleep(Duration::from_millis(200));
+                        assert!(f.root().join("b/y").exists(), "kept going while paused");
+                        f.ctl.pause.store(false, Ordering::Relaxed);
+                    });
+                }
+            });
+            report
+        });
+        assert!(start.elapsed() >= Duration::from_millis(200));
+        assert_eq!(report.deleted.len(), 2);
+        assert!(!f.root().join("b").exists());
+    }
+
+    #[test]
+    fn stopping_a_paused_removal_ends_it() {
+        let f = Fixture::new(&[("a/x", 10), ("b/y", 10)]);
+        let paths = vec![f.path("a"), f.path("b")];
+        let report = std::thread::scope(|s| {
+            let mut paused = false;
+            delete_inner(&f.state, None, &f.ctl, paths, true, &mut |_| {
+                if !paused {
+                    paused = true;
+                    f.ctl.pause.store(true, Ordering::Relaxed);
+                    s.spawn(|| {
+                        std::thread::sleep(Duration::from_millis(100));
+                        f.ctl.cancel.store(true, Ordering::Relaxed);
+                    });
+                }
+            })
+        });
+        assert!(report.failed.iter().any(|d| d.reason == "stopped"));
+        assert!(f.root().join("b/y").exists());
+    }
+
+    #[test]
     fn progress_counts_items_and_files() {
         let f = Fixture::new(&[("a/x", 10), ("a/y", 10), ("b/z", 10)]);
         let paths = vec![f.path("a"), f.path("b")];
         let mut updates = Vec::new();
-        delete_inner(&f.state, None, &f.cancel, paths, true, &mut |p| {
+        delete_inner(&f.state, None, &f.ctl, paths, true, &mut |p| {
             updates.push((p.done, p.total, p.files_done, p.files_total))
         });
         let last = *updates.last().unwrap();
