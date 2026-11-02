@@ -48,18 +48,14 @@ jobs:
           channel: stable
           cache: true
       - run: flutter build macos --release
-      # A disk image with the app next to a link to Applications, so
-      # installing is dragging one onto the other.
-      - name: Build disk image
-        run: |
-          mkdir dmg
-          cp -R build/macos/Build/Products/Release/SpaceMan.app dmg/
-          ln -s /Applications dmg/Applications
-          hdiutil create -volname SpaceMan -srcfolder dmg -fs HFS+ -format UDZO -ov SpaceMan-macOS.dmg
+      # ditto keeps the bundle's symlinks and permissions, which a plain
+      # artifact upload of the .app folder loses.
+      - name: Zip app
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/SpaceMan.app SpaceMan-macOS.zip
       - uses: actions/upload-artifact@v4
         with:
           name: SpaceMan-macOS
-          path: SpaceMan-macOS.dmg
+          path: SpaceMan-macOS.zip
 
   windows:
     runs-on: windows-latest
@@ -71,22 +67,16 @@ jobs:
           channel: stable
           cache: true
       - run: flutter build windows --release
-      # The .exe needs the DLLs and data folder next to it; the installer
-      # puts them all in place and adds a Start menu entry and uninstaller.
-      - name: Build installer
+      # The .exe needs the DLLs and data folder next to it.
+      - name: Zip app
         shell: pwsh
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+\s]+)').Matches[0].Groups[1].Value
-          & $iscc "/DAppVersion=$version" "/DSourceDir=$PWD\build\windows\x64\runner\Release" windows\installer\spaceman.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Rename-Item build/windows/x64/runner/Release SpaceMan
+          Compress-Archive -Path build/windows/x64/runner/SpaceMan -DestinationPath SpaceMan-Windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: SpaceMan-Windows
-          path: SpaceMan-Windows-Setup.exe
+          path: SpaceMan-Windows.zip
 
   android:
     runs-on: ubuntu-latest
@@ -134,9 +124,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "$GITHUB_REF_NAME" SpaceMan-macOS.dmg SpaceMan-Windows-Setup.exe SpaceMan-Android.apk \
+          gh release create "$GITHUB_REF_NAME" SpaceMan-macOS.zip SpaceMan-Windows.zip SpaceMan-Android.apk \
             --title "SpaceMan $GITHUB_REF_NAME" --generate-notes --latest \
-            --notes "Unsigned builds. macOS: open the .dmg, drag SpaceMan to Applications, and the first time right-click it and choose Open. Windows: run SpaceMan-Windows-Setup.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
+            --notes "Unsigned builds. macOS: the first time, right-click SpaceMan.app and choose Open. Windows: unzip, run SpaceMan.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
       # Pushes and pull requests into main share the "dev" release; a pull
       # request stacked on another branch gets its own, so they don't
       # overwrite each other's builds.
@@ -149,6 +139,6 @@ jobs:
           TAG: ${{ (github.event_name == 'push' || github.base_ref == 'main') && 'dev' || format('dev-pr-{0}', github.event.number) }}
         run: |
           gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" SpaceMan-macOS.dmg SpaceMan-Windows-Setup.exe SpaceMan-Android.apk --prerelease --target "$SHA" \
+          gh release create "$TAG" SpaceMan-macOS.zip SpaceMan-Windows.zip SpaceMan-Android.apk --prerelease --target "$SHA" \
             --title "Development build" \
-            --notes "Latest builds ($SHA). Unsigned. macOS: open the .dmg, drag SpaceMan to Applications, and the first time right-click it and choose Open. Windows: run SpaceMan-Windows-Setup.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
+            --notes "Latest builds ($SHA). Unsigned. macOS: the first time, right-click SpaceMan.app and choose Open. Windows: unzip, run SpaceMan.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."

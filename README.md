@@ -18,19 +18,17 @@ first; Windows, Linux, iOS and Android share the same code.
 ## Download
 
 <p>
-  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-macOS.dmg"><img src="https://img.shields.io/badge/Download-macOS-1f6feb?style=for-the-badge&logo=apple" alt="Download for macOS"></a>
-  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Windows-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows-1f6feb?style=for-the-badge&logo=windows" alt="Download for Windows"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-macOS.zip"><img src="https://img.shields.io/badge/Download-macOS-1f6feb?style=for-the-badge&logo=apple" alt="Download for macOS"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Windows.zip"><img src="https://img.shields.io/badge/Download-Windows-1f6feb?style=for-the-badge&logo=windows" alt="Download for Windows"></a>
   <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Android.apk"><img src="https://img.shields.io/badge/Download-Android-1f6feb?style=for-the-badge&logo=android" alt="Download for Android"></a>
 </p>
 
 The builds are not signed yet:
 
-- **macOS**: open the disk image, drag SpaceMan onto Applications, and the
-  first time right-click it there and choose *Open*.
-- **Windows**: run the installer, and if SmartScreen warns, choose
-  *More info*, *Run anyway*. It installs for your account only (no admin
-  needed), adds SpaceMan to the Start menu and can be removed under
-  *Settings > Apps*.
+- **macOS**: unzip, move SpaceMan.app to Applications, and the first time
+  right-click it and choose *Open*.
+- **Windows**: unzip, run `SpaceMan.exe`, and if SmartScreen warns, choose
+  *More info*, *Run anyway*.
 - **Android**: open the APK on your phone and allow installing from this
   source.
 
@@ -158,8 +156,7 @@ grant SpaceMan *Full Disk Access* in System Settings > Privacy & Security.
 folder next to it. No permissions are needed. Removed items go to the Recycle
 Bin. Files in OneDrive that are only in the cloud count as taking no space.
 
-CI publishes an unsigned macOS disk image and Windows installer (built with
-Inno Setup from `windows/installer/spaceman.iss`) as the `dev` prerelease.
+CI publishes unsigned macOS and Windows zips as the `dev` prerelease.
 
 ### Android notes
 
