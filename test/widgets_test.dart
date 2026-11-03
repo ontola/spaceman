@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:spaceman/app_model.dart';
 import 'package:spaceman/main.dart';
 import 'package:spaceman/src/rust/api/spaceman.dart';
+import 'package:spaceman/widgets/not_scanned.dart';
 import 'package:spaceman/widgets/treemap.dart';
 
 import 'support/fake_core.dart';
@@ -305,6 +307,76 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Folders that could not be read:'), findsOneWidget);
       expect(find.text(at('locked')), findsOneWidget);
+    });
+
+    testWidgets('shows the space it did not see as a tile', (tester) async {
+      // 20 GB in use on disk, about 12 MB of it scanned.
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester);
+      expect(find.textContaining('GB not scanned'), findsOneWidget);
+      expect(find.byType(UnscannedTile), findsOneWidget);
+      expect(find.text('Not scanned'), findsOneWidget);
+      expect(find.textContaining('about 2'), findsOneWidget);
+      // Clicking it explains what it is.
+      await tester.tap(find.text('Not scanned'));
+      await tester.pumpAndSettle();
+      expect(find.text('Not in this scan'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Inside a folder there is no such tile.
+      model.open(core.idOf(at('Movies')));
+      await tester.pumpAndSettle();
+      expect(find.byType(UnscannedTile), findsNothing);
+    });
+
+    testWidgets('offers Full Disk Access on macOS without it', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      core.fullDiskAccess = false;
+      await start(tester);
+      expect(
+        find.text('Protected folders, macOS, apps and other users'),
+        findsOneWidget,
+      );
+      expect(find.text('Grant Full Disk Access'), findsOneWidget);
+      await tester.tap(find.text('Why?'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('folders macOS protects'), findsOneWidget);
+      expect(find.text('Grant Full Disk Access'), findsNWidgets(2));
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('lists the space it did not see in its place', (tester) async {
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester, list: true);
+      final rows = find.byType(ListTile);
+      expect(
+        tester.widget(rows.first),
+        isA<ListTile>().having((t) => t.onTap, 'onTap', isNotNull),
+      );
+      expect(find.byType(UnscannedRow), findsOneWidget);
+      expect(find.textContaining('~'), findsOneWidget);
+      expect(find.text('estimate'), findsOneWidget);
+      // Biggest first: above Movies.
+      expect(
+        tester.getTopLeft(find.byType(UnscannedRow)).dy,
+        lessThan(tester.getTopLeft(rowOf('Movies')).dy),
+      );
+    });
+
+    testWidgets('no tile for a folder smaller than home', (tester) async {
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester);
+      expect(find.byType(UnscannedTile), findsOneWidget);
+      await tester.runAsync(() async {
+        await model.setRoot(at('code'));
+        core.scan!.add(scanUpdate(files: 2, done: true));
+        await pumpEventQueue();
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(UnscannedTile), findsNothing);
     });
 
     testWidgets('follows a running scan', (tester) async {

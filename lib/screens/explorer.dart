@@ -8,6 +8,7 @@ import '../app_model.dart';
 import '../format.dart';
 import '../paths.dart';
 import '../src/rust/api/spaceman.dart';
+import '../widgets/not_scanned.dart';
 import '../widgets/row_controls.dart';
 import '../widgets/treemap.dart';
 
@@ -588,10 +589,21 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
     final items = _items(current.id);
-    final largest = items.isEmpty ? 1 : items.first.size;
+    // At the top of the scan, the space it did not see is a row too, in
+    // its place by size.
+    final unscanned = current.id == Treemap.rootId && model.showsUnscanned
+        ? model.unscanned
+        : 0;
+    final unscannedAt = unscanned == 0
+        ? -1
+        : switch (items.indexWhere((n) => n.size < unscanned)) {
+            -1 => items.length,
+            final i => i,
+          };
+    final largest = math.max(items.isEmpty ? 1 : items.first.size, unscanned);
     final list = ListView.builder(
       key: PageStorageKey(id),
-      itemCount: items.length + 1,
+      itemCount: items.length + 1 + (unscanned > 0 ? 1 : 0),
       itemBuilder: (context, i) {
         if (i == 0) {
           return Padding(
@@ -602,7 +614,11 @@ class _ExplorerScreenState extends State<ExplorerScreen>
             ),
           );
         }
-        final node = items[i - 1];
+        if (i - 1 == unscannedAt) {
+          return UnscannedRow(model: model, fraction: unscanned / largest);
+        }
+        final node =
+            items[i - 1 - (unscannedAt >= 0 && i - 1 > unscannedAt ? 1 : 0)];
         final focused = id == model.currentId && node.path == _focusPath;
         return MouseRegion(
           onEnter: (_) => _hovered = node,
