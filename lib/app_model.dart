@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -354,6 +355,38 @@ class AppModel extends ChangeNotifier {
 
   core.DiskSpace? get diskSpace =>
       root.isEmpty ? null : core.diskSpace(path: root);
+
+  /// Disk space in use that the scan does not account for: folders it
+  /// skipped or could not read, the system, apps, other users, snapshots.
+  /// An estimate: what is used on the disk minus what the scan found.
+  int get unscanned {
+    final disk = diskSpace;
+    final scanned = rootNode?.size;
+    if (disk == null || scanned == null || disk.total <= 0) return 0;
+    return math.max(0, disk.total - disk.free - scanned);
+  }
+
+  /// Whether Explore shows [unscanned] as an item of its own at the top of
+  /// the scan. Only when the scan covers the home folder (or all of
+  /// Android's storage): for a smaller folder most of the disk lies
+  /// outside it, and showing that would only crowd out what was asked for.
+  /// Not while a first scan grows either: the gap shrinks as it goes.
+  bool get showsUnscanned {
+    if (live || rootNode == null) return false;
+    // Small gaps are rounding and metadata, not worth a tile.
+    if (unscanned < unscannedThreshold) return false;
+    if (Platform.isAndroid) return true;
+    final home = core.homeDir();
+    if (home == null) return false;
+    // A volume root such as `/` or `C:\` already ends in a separator.
+    final covers =
+        root == home ||
+        isInside(home, root) ||
+        (root.endsWith('/') || root.endsWith(r'\')) && home.startsWith(root);
+    return covers;
+  }
+
+  static const unscannedThreshold = 1024 * 1024 * 1024;
 
   @override
   void dispose() {

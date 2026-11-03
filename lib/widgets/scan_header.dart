@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
@@ -8,7 +6,7 @@ import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
 import 'help.dart';
-import 'row_controls.dart';
+import 'not_scanned.dart';
 
 /// Top bar: which folder is scanned, disk usage and scan controls.
 class ScanHeader extends StatelessWidget {
@@ -198,13 +196,10 @@ class _NotScanned extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final root = model.rootNode;
-    if (root == null) return const SizedBox.shrink();
+    if (model.rootNode == null) return const SizedBox.shrink();
     final unreadable = core.unreadableFolders();
-    final disk = model.diskSpace;
-    final outside = disk == null ? 0 : disk.total - disk.free - root.size;
-    // Small differences are rounding and metadata, not worth a mention.
-    final showOutside = outside > 1024 * 1024 * 1024;
+    final outside = model.unscanned;
+    final showOutside = outside >= AppModel.unscannedThreshold;
     if (unreadable.isEmpty && !showOutside) return const SizedBox.shrink();
 
     final label = showOutside
@@ -213,15 +208,7 @@ class _NotScanned extends StatelessWidget {
               'unreadable';
     return InkWell(
       borderRadius: BorderRadius.circular(4),
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (context) => _NotScannedDialog(
-          root: model.root,
-          scanned: root.size,
-          outside: showOutside ? outside : 0,
-          unreadable: unreadable,
-        ),
-      ),
+      onTap: () => showNotScanned(context, model),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
@@ -232,83 +219,6 @@ class _NotScanned extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NotScannedDialog extends StatelessWidget {
-  const _NotScannedDialog({
-    required this.root,
-    required this.scanned,
-    required this.outside,
-    required this.unreadable,
-  });
-
-  final String root;
-  final int scanned;
-  final int outside;
-  final List<String> unreadable;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Not in this scan'),
-      content: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (outside > 0)
-              Text(
-                Platform.isAndroid
-                    ? 'The scan of $root found ${formatBytes(scanned)}. '
-                          'Another ${formatBytes(outside)} of the phone is in '
-                          'use outside it: mostly apps and their data, and '
-                          'Android itself. See the Apps tab for the size of '
-                          'each app.'
-                    : 'The scan of $root found ${formatBytes(scanned)}. '
-                          'Another ${formatBytes(outside)} of the disk is in '
-                          'use outside it: other folders, macOS itself, apps, '
-                          'other users, local snapshots, and folders that '
-                          'could not be read. Their exact size is unknown, '
-                          'because what can not be read can not be measured.',
-                style: theme.textTheme.bodyMedium,
-              ),
-            if (unreadable.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                unreadable.length >= 200
-                    ? 'First 200 folders that could not be read:'
-                    : 'Folders that could not be read:',
-                style: theme.textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final path in unreadable)
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(path, overflow: TextOverflow.ellipsis),
-                        trailing: RevealButton(path: path),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
     );
   }
 }

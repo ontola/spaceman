@@ -6,6 +6,7 @@ import '../palette.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
 import 'fly_to.dart';
+import 'not_scanned.dart';
 import 'squarify.dart';
 
 /// Where a folder's treemap was last drawn: its area and every tile in it
@@ -45,6 +46,9 @@ class Treemap extends StatefulWidget {
 
   /// Tells which item the pointer is on (null when none).
   final ValueChanged<NodeView?>? onHover;
+
+  /// Id of the top folder of a scan.
+  static const rootId = 0;
 
   @override
   State<Treemap> createState() => TreemapState();
@@ -94,6 +98,8 @@ class TreemapState extends State<Treemap> {
       size,
       model.rootNode,
       model.protectedPaths.length,
+      model.showsUnscanned,
+      model.access,
     );
     if (key != _layoutKey) {
       _layoutKey = key;
@@ -119,11 +125,17 @@ class TreemapState extends State<Treemap> {
         .children(id)
         .where((n) => n.protection != ProtectionState.protected && n.size > 0)
         .toList();
-    if (items.isEmpty || area.width < 4 || area.height < 4) return const [];
+    // At the top of the scan, the space it did not see gets a tile too.
+    final unscanned = depth == 0 && id == Treemap.rootId && model.showsUnscanned
+        ? model.unscanned
+        : 0;
+    if (items.isEmpty && unscanned == 0 || area.width < 4 || area.height < 4) {
+      return const [];
+    }
 
     // Keep it fast and legible: tiles that would be tiny are merged into
     // one "more" tile.
-    final total = items.fold<int>(0, (s, n) => s + n.size);
+    final total = items.fold<int>(unscanned, (s, n) => s + n.size);
     final minArea = depth == 0 ? 600.0 : 900.0;
     final maxTiles = depth == 0 ? 150 : 40;
     final shown = <NodeView>[];
@@ -138,15 +150,32 @@ class TreemapState extends State<Treemap> {
         restCount++;
       }
     }
-    final values = [for (final n in shown) n.size.toDouble()];
-    if (rest > 0) values.add(rest.toDouble());
+    // Index into shown, or one of the two kinds of extra tile; laid out
+    // largest first, as squarify wants.
+    const more = -1, unseen = -2;
+    final order = [for (var i = 0; i < shown.length; i++) i];
+    if (rest > 0) order.add(more);
+    if (unscanned > 0) order.add(unseen);
+    int sizeOf(int i) => switch (i) {
+      more => rest,
+      unseen => unscanned,
+      _ => shown[i].size,
+    };
+    order.sort((a, b) => sizeOf(b).compareTo(sizeOf(a)));
 
-    final rects = squarify(values, area);
+    final rects = squarify([for (final i in order) sizeOf(i).toDouble()], area);
     final tiles = <_Tile>[];
-    for (var i = 0; i < rects.length; i++) {
-      final r = rects[i];
-      if (i >= shown.length) {
+    for (var k = 0; k < rects.length; k++) {
+      final r = rects[k];
+      final i = order[k];
+      if (i == more) {
         tiles.add(_Tile(null, r, depth, hue, more: restCount, moreSize: rest));
+        continue;
+      }
+      if (i == unseen) {
+        tiles.add(
+          _Tile(null, r, depth, hue, moreSize: unscanned, unseen: true),
+        );
         continue;
       }
       final n = shown[i];
@@ -256,7 +285,7 @@ class TreemapState extends State<Treemap> {
             child: LayoutBuilder(
               builder: (context, c) {
                 final tiles = _layout(c.biggest);
-                return MouseRegion(
+                final map = MouseRegion(
                   onHover: (e) {
                     final t = _hit(tiles, e.localPosition);
                     if (t != _hover) {
@@ -293,6 +322,27 @@ class TreemapState extends State<Treemap> {
                     ),
                   ),
                 );
+                final unseen = tiles.where((t) => t.unseen).firstOrNull;
+                if (unseen == null) return map;
+                // A widget rather than paint: it has buttons.
+                return Stack(
+                  children: [
+                    map,
+                    Positioned.fromRect(
+                      rect: unseen.rect.deflate(0.5),
+                      child: MouseRegion(
+                        onEnter: (_) {
+                          setState(() => _hover = unseen);
+                          widget.onHover?.call(null);
+                        },
+                        onExit: (_) {
+                          if (_hover == unseen) setState(() => _hover = null);
+                        },
+                        child: UnscannedTile(model: model),
+                      ),
+                    ),
+                  ],
+                );
               },
             ),
           ),
@@ -303,6 +353,9 @@ class TreemapState extends State<Treemap> {
           child: Text(
             _hover == null
                 ? 'Click a folder to open it. Right-click for more.'
+                : _hover!.unseen
+                ? 'Not scanned: about ${formatBytes(_hover!.moreSize)}. '
+                      'Click to see why.'
                 : _hover!.node == null
                 ? '${_hover!.more} smaller items, ${formatBytes(_hover!.moreSize)}'
                 : '${_hover!.node!.path}  ·  ${formatBytes(_hover!.node!.size)}',
@@ -325,6 +378,7 @@ class _Tile {
     this.hue, {
     this.more = 0,
     this.moreSize = 0,
+    this.unseen = false,
   });
 
   /// Null for the tile that merges small items.
@@ -334,6 +388,9 @@ class _Tile {
   final int hue;
   final int more;
   final int moreSize;
+
+  /// The space the scan did not see; drawn by [UnscannedTile].
+  final bool unseen;
   List<_Tile> children = const [];
 }
 
@@ -406,6 +463,7 @@ class _Painter extends CustomPainter {
   }
 
   void _paintTile(Canvas canvas, _Tile t) {
+    if (t.unseen) return;
     final r = t.rect.deflate(0.5);
     if (r.width <= 0 || r.height <= 0) return;
     final rr = RRect.fromRectAndRadius(r, const Radius.circular(3));
