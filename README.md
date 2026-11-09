@@ -23,12 +23,10 @@ first; Windows, Linux, iOS and Android share the same code.
   <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Android.apk"><img src="https://img.shields.io/badge/Download-Android-1f6feb?style=for-the-badge&logo=android" alt="Download for Android"></a>
 </p>
 
-The builds are not signed yet:
-
-- **macOS**: open the `.dmg`, drag SpaceMan to Applications, and the first
-  time right-click it and choose *Open*.
-- **Windows**: run the setup, and if SmartScreen warns, choose *More info*,
-  *Run anyway*. It installs for your user only (no admin needed), adds a
+- **macOS**: open the `.dmg` and drag SpaceMan to Applications. It is signed
+  and notarized by Apple, so it opens without a warning.
+- **Windows**: the setup is not signed yet. Run it, and if SmartScreen warns,
+  choose *More info*, *Run anyway*. It installs for your user only (no admin needed), adds a
   Start menu entry and can be removed under *Settings > Apps*.
 - **Android**: open the APK on your phone and allow installing from this
   source.
@@ -159,10 +157,15 @@ Bin. Files in OneDrive that are only in the cloud count as taking no space.
 
 The installer is built with [Inno Setup](https://jrsoftware.org/isinfo.php)
 from `windows/installer/spaceman.iss`:
-`iscc /DAppVersion=0.1.0 windows\installer\spaceman.iss` writes
+`iscc /DAppVersion=0.2.0 windows\installer\spaceman.iss` writes
 `build\installer\SpaceMan-Windows-Setup.exe`.
 
-CI publishes an unsigned macOS `.dmg` and Windows setup as the `dev` prerelease.
+CI publishes the macOS `.dmg` and the Windows setup as the `dev` prerelease.
+The `.dmg` is signed with the Developer ID of Argu B.V. and notarized when
+the repository has the secrets `MACOS_CERT_P12` (base64 of the exported
+certificate with its key), `MACOS_CERT_PASSWORD`, `APPLE_ID`,
+`APPLE_TEAM_ID` and `APPLE_APP_PASSWORD` (an app-specific password); without
+them it is built unsigned. The Windows setup is not signed.
 
 ### Android notes
 
