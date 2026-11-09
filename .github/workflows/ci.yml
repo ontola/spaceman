@@ -48,6 +48,43 @@ jobs:
           channel: stable
           cache: true
       - run: flutter build macos --release
+      # Signing and notarizing need the Developer ID certificate and an
+      # Apple ID in the repository secrets; without them (forks, before they
+      # are set up) the build stays unsigned.
+      - name: Import signing certificate
+        id: sign
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "No MACOS_CERT_P12 secret: building unsigned."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep 'Developer ID Application' | head -1 | awk '{print $2}')"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+      - name: Sign app
+        if: steps.sign.outputs.identity != ''
+        env:
+          IDENTITY: ${{ steps.sign.outputs.identity }}
+        run: |
+          app=build/macos/Build/Products/Release/SpaceMan.app
+          # Inside out: the frameworks first, then the app around them.
+          find "$app/Contents/Frameworks" -depth \( -name '*.framework' -o -name '*.dylib' \) -print0 |
+            xargs -0 -I{} codesign --force --options runtime --timestamp --sign "$IDENTITY" {}
+          codesign --force --options runtime --timestamp --sign "$IDENTITY" \
+            --entitlements macos/Runner/Release.entitlements "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
       # A disk image with the app next to an Applications shortcut, so
       # installing is dragging one onto the other.
       - name: Build disk image
@@ -56,6 +93,26 @@ jobs:
           ditto build/macos/Build/Products/Release/SpaceMan.app dmg/SpaceMan.app
           ln -s /Applications dmg/Applications
           hdiutil create -volname SpaceMan -srcfolder dmg -fs HFS+ -format UDZO -ov SpaceMan-macOS.dmg
+      # Apple checks the signed app for malware and vouches for it, so it
+      # opens without a warning. The ticket is stapled to the disk image so
+      # this also works offline.
+      - name: Sign and notarize disk image
+        if: steps.sign.outputs.identity != ''
+        env:
+          IDENTITY: ${{ steps.sign.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          codesign --force --timestamp --sign "$IDENTITY" SpaceMan-macOS.dmg
+          if [ -z "$APPLE_ID" ]; then
+            echo "No APPLE_ID secret: signed, but not notarized."
+            exit 0
+          fi
+          xcrun notarytool submit SpaceMan-macOS.dmg --wait \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+          xcrun stapler staple SpaceMan-macOS.dmg
+          spctl --assess --type open --context context:primary-signature --verbose SpaceMan-macOS.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: SpaceMan-macOS
@@ -142,7 +199,7 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" SpaceMan-macOS.dmg SpaceMan-Windows-Setup.exe SpaceMan-Android.apk \
             --title "SpaceMan $GITHUB_REF_NAME" --generate-notes --latest \
-            --notes "Unsigned builds. macOS: open the .dmg, drag SpaceMan to Applications, and the first time right-click it and choose Open. Windows: run SpaceMan-Windows-Setup.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
+            --notes "macOS: open the .dmg and drag SpaceMan to Applications (if macOS says it cannot check the app, right-click it and choose Open). Windows (unsigned): run SpaceMan-Windows-Setup.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
       # Pushes and pull requests into main share the "dev" release; a pull
       # request stacked on another branch gets its own, so they don't
       # overwrite each other's builds.
@@ -157,4 +214,4 @@ jobs:
           gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" SpaceMan-macOS.dmg SpaceMan-Windows-Setup.exe SpaceMan-Android.apk --prerelease --target "$SHA" \
             --title "Development build" \
-            --notes "Latest builds ($SHA). Unsigned. macOS: open the .dmg, drag SpaceMan to Applications, and the first time right-click it and choose Open. Windows: run SpaceMan-Windows-Setup.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
+            --notes "Latest builds ($SHA). macOS: open the .dmg and drag SpaceMan to Applications (if macOS says it cannot check the app, right-click it and choose Open). Windows (unsigned): run SpaceMan-Windows-Setup.exe, and if SmartScreen warns, choose More info, Run anyway. Android: open SpaceMan-Android.apk on your phone and allow installing from this source."
