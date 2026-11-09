@@ -211,7 +211,6 @@ class FolderBar extends StatelessWidget {
     );
     final buttons = [
       for (final a in [
-        ItemAction.select,
         ItemAction.protect,
         ItemAction.reveal,
         ItemAction.trash,
@@ -229,40 +228,77 @@ class FolderBar extends StatelessWidget {
             icon: Icon(d.icon, size: 20),
           ),
     ];
+    // Selecting is the main thing to do here, so it leads, filled.
+    final select = describe(ItemAction.select, model, folder)!;
+    final selected = model.isSelected(folder.path);
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 2, 8, 2),
-        child: Row(
-          children: [
-            Icon(Icons.folder, size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '${folder.name.isEmpty ? folder.path : folder.name}  ·  '
-                '${formatBytes(folder.size)}',
-                style: theme.textTheme.titleSmall,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            ...buttons,
-            if (showKeyHints) ...[
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  '↑↓←→ move  ·  Enter open  ·  $upKeys up  ·  '
-                  'Space select  ·  Right-click for more  ·  ? help',
-                  style: muted,
-                  textAlign: TextAlign.end,
-                  overflow: TextOverflow.ellipsis,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          // Phones: just the buttons.
+          final narrow = c.maxWidth < 600;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+            child: Row(
+              children: [
+                Tooltip(
+                  message: showKeyHints
+                      ? 'Space selects the item under the mouse instead'
+                      : '',
+                  child:
+                      (selected ? FilledButton.tonalIcon : FilledButton.icon)(
+                        onPressed: select.enabled
+                            ? () => runAction(
+                                context,
+                                ItemAction.select,
+                                model,
+                                folder,
+                              )
+                            : null,
+                        icon: Icon(select.icon, size: 20),
+                        label: Text(
+                          narrow ? select.label : '${select.label} this folder',
+                        ),
+                      ),
                 ),
-              ),
-            ] else
-              const Spacer(),
-          ],
-        ),
+                const SizedBox(width: 8),
+                if (!narrow) ...[
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.folder,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '${folder.name.isEmpty ? folder.path : folder.name}  ·  '
+                      '${formatBytes(folder.size)}',
+                      style: theme.textTheme.titleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                ...buttons,
+                if (showKeyHints && !narrow) ...[
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      '↑↓←→ move  ·  Enter open  ·  $upKeys up  ·  '
+                      'Space select  ·  Right-click for more  ·  ? help',
+                      style: muted,
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

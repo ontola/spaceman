@@ -298,7 +298,7 @@ void main() {
       );
       await tester.tap(find.text('Movies'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Select this folder'));
+      await tester.tap(find.text('Select this folder'));
       await tester.pumpAndSettle();
       expect(model.selection.keys, [at('Movies')]);
       await tester.tap(find.byTooltip('Move to Trash this folder'));
