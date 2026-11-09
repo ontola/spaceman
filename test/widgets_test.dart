@@ -127,6 +127,10 @@ void main() {
       expect(find.text('film.mkv'), findsOneWidget);
       expect(model.currentId, core.idOf(at('Movies')));
 
+      // Each breadcrumb shows its folder's size under its name.
+      expect(find.widgetWithText(TextButton, '7.0 MB'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, '12.0 MB'), findsOneWidget);
+
       // The breadcrumb of the root shows its last path component.
       await tester.tap(find.widgetWithText(TextButton, 'home'));
       await tester.pumpAndSettle();

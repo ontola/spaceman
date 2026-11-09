@@ -710,6 +710,7 @@ class _Breadcrumbs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     // Left-aligned while it fits; once too long it scrolls, keeping the
     // current folder (the end) in view.
     return Align(
@@ -724,7 +725,20 @@ class _Breadcrumbs extends StatelessWidget {
               if (i > 0) const Icon(Icons.chevron_right, size: 18),
               TextButton(
                 onPressed: () => onOpen(c.id),
-                child: Text(i == 0 ? lastComponent(c.name) : c.name),
+                // The size of each folder on the way, small under its name.
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(i == 0 ? lastComponent(c.name) : c.name),
+                    Text(
+                      formatBytes(c.size),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
