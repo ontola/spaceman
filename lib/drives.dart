@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'platform.dart';
 import 'src/rust/api/spaceman.dart' as core;
 
 /// A disk the user can scan as a whole.
@@ -27,8 +28,22 @@ class Drive {
 @visibleForTesting
 List<Drive> Function()? debugDrives;
 
-/// The disks of this computer, the main one first. Empty on phones, where
-/// the app scans shared storage instead.
+/// The disks of this device, the main one first. On Android: internal
+/// storage and any SD card or USB drive.
+Future<List<Drive>> loadDrives() async {
+  if (debugDrives != null) return debugDrives!();
+  if (!Platform.isAndroid) return listDrives();
+  try {
+    final found = await androidVolumes();
+    found.sort((a, b) => (b.$3 ? 1 : 0) - (a.$3 ? 1 : 0));
+    return _measure(found);
+  } on Exception {
+    return const [];
+  }
+}
+
+/// The disks of this computer, the main one first. Empty on phones; see
+/// [loadDrives].
 List<Drive> listDrives() {
   if (debugDrives != null) return debugDrives!();
   final List<(String, String, bool)> found;
@@ -41,6 +56,10 @@ List<Drive> listDrives() {
   } else {
     return const [];
   }
+  return _measure(found);
+}
+
+List<Drive> _measure(List<(String, String, bool)> found) {
   final drives = <Drive>[];
   for (final (path, name, main) in found) {
     final space = core.diskSpace(path: path);

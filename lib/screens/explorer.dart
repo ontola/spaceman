@@ -595,21 +595,25 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
     final items = _items(current.id);
-    // At the top of the scan, the space it did not see is a row too, in
-    // its place by size.
-    final unscanned = current.id == Treemap.rootId && model.showsUnscanned
-        ? model.unscanned
-        : 0;
-    final unscannedAt = unscanned == 0
-        ? -1
-        : switch (items.indexWhere((n) => n.size < unscanned)) {
-            -1 => items.length,
-            final i => i,
-          };
-    final largest = math.max(items.isEmpty ? 1 : items.first.size, unscanned);
+    // At the top of the scan, the space it did not see gets rows too, in
+    // their place by size.
+    final parts = current.id == Treemap.rootId
+        ? (model.unscannedParts.where((p) => p.size > 0).toList()
+            ..sort((a, b) => b.size.compareTo(a.size)))
+        : const <UnscannedPart>[];
+    // Items and parts merged by size: a part is a record, an item a node.
+    final rows = <Object>[...items];
+    for (final p in parts) {
+      final at = rows.indexWhere((r) => r is NodeView && r.size < p.size);
+      rows.insert(at == -1 ? rows.length : at, p);
+    }
+    final largest = math.max(
+      items.isEmpty ? 1 : items.first.size,
+      parts.isEmpty ? 0 : parts.first.size,
+    );
     final list = ListView.builder(
       key: PageStorageKey(id),
-      itemCount: items.length + 1 + (unscanned > 0 ? 1 : 0),
+      itemCount: rows.length + 1,
       itemBuilder: (context, i) {
         if (i == 0) {
           return Padding(
@@ -620,11 +624,15 @@ class _ExplorerScreenState extends State<ExplorerScreen>
             ),
           );
         }
-        if (i - 1 == unscannedAt) {
-          return UnscannedRow(model: model, fraction: unscanned / largest);
+        final row = rows[i - 1];
+        if (row is UnscannedPart) {
+          return UnscannedRow(
+            model: model,
+            part: row,
+            fraction: row.size / largest,
+          );
         }
-        final node =
-            items[i - 1 - (unscannedAt >= 0 && i - 1 > unscannedAt ? 1 : 0)];
+        final node = row as NodeView;
         final focused = id == model.currentId && node.path == _focusPath;
         return MouseRegion(
           onEnter: (_) => _hovered = node,

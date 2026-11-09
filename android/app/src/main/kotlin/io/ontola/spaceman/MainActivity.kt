@@ -35,6 +35,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "storageRoot" ->
                         result.success(Environment.getExternalStorageDirectory().absolutePath)
+                    "storageVolumes" -> result.success(storageVolumes())
                     "hasUsageAccess" -> result.success(hasUsageAccess())
                     "requestUsageAccess" -> {
                         openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS)
@@ -103,6 +104,33 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /// Internal storage and any SD card or USB drive that is mounted, each
+    /// with the folder it is at and the name Android shows for it.
+    private fun storageVolumes(): List<Map<String, Any>> {
+        val sm = getSystemService(StorageManager::class.java)
+        val found = mutableListOf<Map<String, Any>>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            for (v in sm.storageVolumes) {
+                if (v.state != Environment.MEDIA_MOUNTED) continue
+                val dir = v.directory ?: continue
+                found.add(volume(dir.absolutePath, v.getDescription(this), v.isPrimary))
+            }
+        } else {
+            // Older Android has no public path per volume; the app's own
+            // folder on each one sits at <volume>/Android/data/<package>.
+            for (f in getExternalFilesDirs(null)) {
+                if (f == null) continue
+                val path = f.absolutePath.substringBefore("/Android/data/")
+                val v = sm.getStorageVolume(f) ?: continue
+                found.add(volume(path, v.getDescription(this), v.isPrimary))
+            }
+        }
+        return found
+    }
+
+    private fun volume(path: String, name: String, primary: Boolean) =
+        mapOf("path" to path, "name" to name, "primary" to primary)
+
     private fun hasUsageAccess(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val appOps = getSystemService(AppOpsManager::class.java)
@@ -129,7 +157,26 @@ class MainActivity : FlutterActivity() {
         val stats = getSystemService(StorageStatsManager::class.java)
         val user = Process.myUserHandle()
         val uuid = StorageManager.UUID_DEFAULT
-        val apps = packageManager.getInstalledApplications(0).mapNotNull { info ->
+        // One query per app, and phones have hundreds: ask in parallel.
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(8)
+        val futures = packageManager.getInstalledApplications(0).map { info ->
+            pool.submit(java.util.concurrent.Callable { appSize(stats, uuid, user, info) })
+        }
+        val apps = futures.mapNotNull { it.get() }
+        pool.shutdown()
+        return mapOf(
+            "apps" to apps,
+            "total" to stats.getTotalBytes(uuid),
+            "free" to stats.getFreeBytes(uuid),
+        )
+    }
+
+    private fun appSize(
+        stats: StorageStatsManager,
+        uuid: java.util.UUID,
+        user: android.os.UserHandle,
+        info: ApplicationInfo,
+    ): Map<String, Any>? =
             try {
                 val s = stats.queryStatsForPackage(uuid, info.packageName, user)
                 mapOf(
@@ -144,13 +191,6 @@ class MainActivity : FlutterActivity() {
             } catch (e: Exception) {
                 null
             }
-        }
-        return mapOf(
-            "apps" to apps,
-            "total" to stats.getTotalBytes(uuid),
-            "free" to stats.getFreeBytes(uuid),
-        )
-    }
 
     private fun openSettings(action: String, pkg: String? = packageName) {
         try {

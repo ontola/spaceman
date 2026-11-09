@@ -99,6 +99,8 @@ class TreemapState extends State<Treemap> {
       model.protectedPaths.length,
       model.showsUnscanned,
       model.access,
+      model.apps,
+      model.usageAccess,
     );
     if (key != _layoutKey) {
       _layoutKey = key;
@@ -125,9 +127,10 @@ class TreemapState extends State<Treemap> {
         .where((n) => n.protection != ProtectionState.protected && n.size > 0)
         .toList();
     // At the top of the scan, the space it did not see gets a tile too.
-    final unscanned = depth == 0 && id == Treemap.rootId && model.showsUnscanned
-        ? model.unscanned
-        : 0;
+    final parts = depth == 0 && id == Treemap.rootId
+        ? model.unscannedParts.where((p) => p.size > 0).toList()
+        : const <UnscannedPart>[];
+    final unscanned = parts.fold<int>(0, (s, p) => s + p.size);
     if (items.isEmpty && unscanned == 0 || area.width < 4 || area.height < 4) {
       return const [];
     }
@@ -149,17 +152,19 @@ class TreemapState extends State<Treemap> {
         restCount++;
       }
     }
-    // Index into shown, or one of the two kinds of extra tile; laid out
-    // largest first, as squarify wants.
-    const more = -1, unseen = -2;
+    // Index into shown, the "more" tile, or -2 - k for unscanned part k;
+    // laid out largest first, as squarify wants.
+    const more = -1;
     final order = [for (var i = 0; i < shown.length; i++) i];
     if (rest > 0) order.add(more);
-    if (unscanned > 0) order.add(unseen);
-    int sizeOf(int i) => switch (i) {
-      more => rest,
-      unseen => unscanned,
-      _ => shown[i].size,
-    };
+    for (var k = 0; k < parts.length; k++) {
+      order.add(-2 - k);
+    }
+    int sizeOf(int i) => i == more
+        ? rest
+        : i < more
+        ? parts[-2 - i].size
+        : shown[i].size;
     order.sort((a, b) => sizeOf(b).compareTo(sizeOf(a)));
 
     final rects = squarify([for (final i in order) sizeOf(i).toDouble()], area);
@@ -171,10 +176,9 @@ class TreemapState extends State<Treemap> {
         tiles.add(_Tile(null, r, depth, hue, more: restCount, moreSize: rest));
         continue;
       }
-      if (i == unseen) {
-        tiles.add(
-          _Tile(null, r, depth, hue, moreSize: unscanned, unseen: true),
-        );
+      if (i < more) {
+        final part = parts[-2 - i];
+        tiles.add(_Tile(null, r, depth, hue, moreSize: part.size, part: part));
         continue;
       }
       final n = shown[i];
@@ -276,25 +280,26 @@ class TreemapState extends State<Treemap> {
                     ),
                   ),
                 );
-                final unseen = tiles.where((t) => t.unseen).firstOrNull;
-                if (unseen == null) return map;
-                // A widget rather than paint: it has buttons.
+                final unseen = tiles.where((t) => t.unseen).toList();
+                if (unseen.isEmpty) return map;
+                // Widgets rather than paint: they have buttons.
                 return Stack(
                   children: [
                     map,
-                    Positioned.fromRect(
-                      rect: unseen.rect.deflate(0.5),
-                      child: MouseRegion(
-                        onEnter: (_) {
-                          setState(() => _hover = unseen);
-                          widget.onHover?.call(null);
-                        },
-                        onExit: (_) {
-                          if (_hover == unseen) setState(() => _hover = null);
-                        },
-                        child: UnscannedTile(model: model),
+                    for (final t in unseen)
+                      Positioned.fromRect(
+                        rect: t.rect.deflate(0.5),
+                        child: MouseRegion(
+                          onEnter: (_) {
+                            setState(() => _hover = t);
+                            widget.onHover?.call(null);
+                          },
+                          onExit: (_) {
+                            if (_hover == t) setState(() => _hover = null);
+                          },
+                          child: UnscannedTile(model: model, part: t.part!),
+                        ),
                       ),
-                    ),
                   ],
                 );
               },
@@ -308,8 +313,7 @@ class TreemapState extends State<Treemap> {
             _hover == null
                 ? 'Click a folder to open it. Right-click for more.'
                 : _hover!.unseen
-                ? 'Not scanned: about ${formatBytes(_hover!.moreSize)}. '
-                      'Click to see why.'
+                ? unscannedHint(_hover!.part!)
                 : _hover!.node == null
                 ? '${_hover!.more} smaller items, ${formatBytes(_hover!.moreSize)}'
                 : '${_hover!.node!.path}  ·  ${formatBytes(_hover!.node!.size)}',
@@ -332,7 +336,7 @@ class _Tile {
     this.hue, {
     this.more = 0,
     this.moreSize = 0,
-    this.unseen = false,
+    this.part,
   });
 
   /// Null for the tile that merges small items.
@@ -343,8 +347,9 @@ class _Tile {
   final int more;
   final int moreSize;
 
-  /// The space the scan did not see; drawn by [UnscannedTile].
-  final bool unseen;
+  /// Space the scan did not see; drawn by [UnscannedTile].
+  final UnscannedPart? part;
+  bool get unseen => part != null;
   List<_Tile> children = const [];
 }
 

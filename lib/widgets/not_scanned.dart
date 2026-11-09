@@ -167,18 +167,114 @@ class NotScannedDialog extends StatelessWidget {
   }
 }
 
-/// The space the scan does not see, as one tile of the treemap: a big
-/// question mark, how much it is, and the way to see more.
+/// How a block for part of the unscanned space looks and what it does.
+class _PartView {
+  _PartView({
+    required this.icon,
+    required this.title,
+    required this.size,
+    required this.summary,
+    required this.onTap,
+    this.action,
+    this.estimate = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final int size;
+  final String summary;
+  final VoidCallback onTap;
+
+  /// The main thing to do about it, such as granting access.
+  final Widget? action;
+
+  /// The size is the gap in disk use, not measured.
+  final bool estimate;
+
+  String get sizeText =>
+      estimate ? 'about ${formatBytes(size)}' : formatBytes(size);
+}
+
+_PartView _view(BuildContext context, AppModel model, UnscannedPart part) {
+  void why() => showNotScanned(context, model);
+  void seeApps() => model.showTab(AppModel.appsTab);
+  switch (part.kind) {
+    case UnscannedKind.unknown:
+      return _PartView(
+        icon: Icons.question_mark_rounded,
+        title: 'Not scanned',
+        size: part.size,
+        summary: unscannedSummary(model),
+        onTap: why,
+        action: canGrantFullDiskAccess(model)
+            ? const FullDiskAccessButton(dense: true)
+            : null,
+      );
+    case UnscannedKind.apps:
+      final apps = model.apps;
+      if (model.usageAccess == false) {
+        return _PartView(
+          icon: Icons.apps,
+          title: 'Apps',
+          size: part.size,
+          summary:
+              'Apps and their data. Android shows how big each one '
+              'is once you allow usage access.',
+          onTap: seeApps,
+          action: const FilledButton(
+            onPressed: requestUsageAccess,
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
+            child: Text('Allow usage access'),
+          ),
+        );
+      }
+      if (apps == null) {
+        return _PartView(
+          icon: Icons.apps,
+          title: 'Apps',
+          size: part.size,
+          summary: 'Asking Android how big each app is...',
+          onTap: seeApps,
+        );
+      }
+      return _PartView(
+        icon: Icons.apps,
+        title: 'Apps',
+        size: part.size,
+        estimate: false,
+        summary: '${apps.apps.length} apps and their data',
+        onTap: seeApps,
+        action: FilledButton.tonal(
+          onPressed: seeApps,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          child: const Text('See apps'),
+        ),
+      );
+    case UnscannedKind.system:
+      return _PartView(
+        icon: Icons.phone_android,
+        title: 'System and other',
+        size: part.size,
+        summary: 'Android itself and space it keeps aside',
+        onTap: why,
+      );
+  }
+}
+
+/// Part of the space the scan does not see, as one tile of the treemap:
+/// what it is, how big, and the way to see more.
 class UnscannedTile extends StatelessWidget {
-  const UnscannedTile({super.key, required this.model});
+  const UnscannedTile({super.key, required this.model, required this.part});
 
   final AppModel model;
+  final UnscannedPart part;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted = scheme.onSurfaceVariant;
+    final v = _view(context, model, part);
     return Material(
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
@@ -187,20 +283,13 @@ class UnscannedTile extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => showNotScanned(context, model),
+        onTap: v.onTap,
         child: LayoutBuilder(
           builder: (context, c) {
-            final size = formatBytes(model.unscanned);
             if (c.maxWidth < 70 || c.maxHeight < 50) {
-              return Center(
-                child: Text(
-                  '?',
-                  style: theme.textTheme.titleLarge?.copyWith(color: muted),
-                ),
-              );
+              return Center(child: Icon(v.icon, size: 20, color: muted));
             }
             final roomy = c.maxWidth >= 220 && c.maxHeight >= 200;
-            final grant = canGrantFullDiskAccess(model);
             return Center(
               child: SingleChildScrollView(
                 physics: const NeverScrollableScrollPhysics(),
@@ -208,14 +297,10 @@ class UnscannedTile extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.question_mark_rounded,
-                      size: roomy ? 56 : 28,
-                      color: muted,
-                    ),
+                    Icon(v.icon, size: roomy ? 56 : 28, color: muted),
                     const SizedBox(height: 4),
                     Text(
-                      'Not scanned',
+                      v.title,
                       style:
                           (roomy
                                   ? theme.textTheme.titleMedium
@@ -224,25 +309,26 @@ class UnscannedTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      'about $size',
+                      v.sizeText,
                       style: theme.textTheme.bodySmall?.copyWith(color: muted),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (roomy) ...[
                       const SizedBox(height: 8),
                       Text(
-                        unscannedSummary(model),
+                        v.summary,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: muted,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      if (grant) const FullDiskAccessButton(dense: true),
-                      TextButton(
-                        onPressed: () => showNotScanned(context, model),
-                        child: const Text('Why?'),
-                      ),
+                      ?v.action,
+                      if (part.kind == UnscannedKind.unknown)
+                        TextButton(
+                          onPressed: v.onTap,
+                          child: const Text('Why?'),
+                        ),
                     ],
                   ],
                 ),
@@ -255,11 +341,17 @@ class UnscannedTile extends StatelessWidget {
   }
 }
 
-/// The space the scan does not see, as a row of the Explore list.
+/// Part of the space the scan does not see, as a row of the Explore list.
 class UnscannedRow extends StatelessWidget {
-  const UnscannedRow({super.key, required this.model, required this.fraction});
+  const UnscannedRow({
+    super.key,
+    required this.model,
+    required this.part,
+    required this.fraction,
+  });
 
   final AppModel model;
+  final UnscannedPart part;
 
   /// Size relative to the largest item, for the bar.
   final double fraction;
@@ -267,14 +359,13 @@ class UnscannedRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final v = _view(context, model, part);
+    final narrow = MediaQuery.sizeOf(context).width < 600;
     return ListTile(
-      onTap: () => showNotScanned(context, model),
-      leading: Icon(
-        Icons.help_outline,
-        color: theme.colorScheme.onSurfaceVariant,
-      ),
+      onTap: v.onTap,
+      leading: Icon(v.icon, color: theme.colorScheme.onSurfaceVariant),
       title: Text(
-        'Not scanned · ${unscannedSummary(model)}',
+        narrow ? v.title : '${v.title} · ${v.summary}',
         overflow: TextOverflow.ellipsis,
         style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
       ),
@@ -282,28 +373,36 @@ class UnscannedRow extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (canGrantFullDiskAccess(model)) ...[
-            const FullDiskAccessButton(dense: true),
-            const SizedBox(width: 12),
-          ],
+          if (v.action != null) ...[v.action!, const SizedBox(width: 12)],
           SizedBox(
-            width: 120,
+            width: narrow ? 72 : 120,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '~${formatBytes(model.unscanned)}',
+                  v.estimate ? '~${formatBytes(v.size)}' : formatBytes(v.size),
                   style: theme.textTheme.titleSmall,
                 ),
-                Text('estimate', style: theme.textTheme.bodySmall),
+                if (v.estimate)
+                  Text('estimate', style: theme.textTheme.bodySmall),
               ],
             ),
           ),
           // Lines the size up with the rows that have buttons after it.
-          SizedBox(width: (canReveal ? 3 : 2) * (leadingGap + leadingSlot)),
+          if (!narrow)
+            SizedBox(width: (canReveal ? 3 : 2) * (leadingGap + leadingSlot)),
         ],
       ),
     );
   }
 }
+
+/// One line about [part] for the status line under the treemap.
+String unscannedHint(UnscannedPart part) => switch (part.kind) {
+  UnscannedKind.unknown =>
+    'Not scanned: about ${formatBytes(part.size)}. Click to see why.',
+  UnscannedKind.apps => 'Apps: ${formatBytes(part.size)}. Click to see them.',
+  UnscannedKind.system =>
+    'System and other: about ${formatBytes(part.size)}. Click to see why.',
+};

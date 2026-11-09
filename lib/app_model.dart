@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'drives.dart';
@@ -23,6 +25,22 @@ enum DiskAccess {
   undecided,
 }
 
+/// What part of the space the scan does not see a block in Explore stands
+/// for.
+enum UnscannedKind {
+  /// Unknown: folders the scan skipped or could not read, the system, ...
+  unknown,
+
+  /// Android: installed apps and their data, which live outside shared
+  /// storage. Sized by Android once SpaceMan has usage access.
+  apps,
+
+  /// Android: what is left besides the apps and the user's files.
+  system,
+}
+
+typedef UnscannedPart = ({UnscannedKind kind, int size});
+
 /// App-wide state. The scanned tree itself lives in Rust; this only keeps
 /// track of what the UI is showing and forwards actions to the core.
 class AppModel extends ChangeNotifier {
@@ -37,8 +55,8 @@ class AppModel extends ChangeNotifier {
   Drive? get rootDrive => drives.where((d) => d.path == root).firstOrNull;
 
   /// Reads the disks again, e.g. when the user opens the drive menu.
-  void refreshDrives() {
-    drives = listDrives();
+  Future<void> refreshDrives() async {
+    drives = await loadDrives();
     notifyListeners();
   }
 
@@ -78,12 +96,87 @@ class AppModel extends ChangeNotifier {
     }
   }
 
+  /// The tab that is shown: Explore, Clean up, Do not touch, Apps.
+  int tab = 0;
+
+  void showTab(int i) {
+    tab = i;
+    notifyListeners();
+  }
+
+  static const appsTab = 3;
+
+  /// Android: whether SpaceMan may read app sizes (usage access), unknown
+  /// until checked.
+  bool? usageAccess;
+
+  /// Android: the sizes of installed apps: from the last time, until read
+  /// again.
+  AppSizes? apps;
+  bool loadingApps = false;
+  String? appsError;
+
+  /// Null until [init] knows where settings go.
+  File? get _appsFile =>
+      _configured ? File('$_configDir/app_sizes.json') : null;
+  bool _configured = false;
+
+  /// Reads app sizes from Android, which takes a while with hundreds of
+  /// apps. Done at start and whenever SpaceMan comes back to the front
+  /// (usage access may have been granted, apps cleared or uninstalled).
+  Future<void> loadApps() async {
+    if (!onAndroid || loadingApps) return;
+    usageAccess = await hasUsageAccess();
+    notifyListeners();
+    if (usageAccess != true) return;
+    loadingApps = true;
+    notifyListeners();
+    try {
+      apps = await appSizes();
+      appsError = null;
+      try {
+        await _appsFile?.writeAsString(jsonEncode(appSizesToJson(apps!)));
+      } on FileSystemException {
+        // Next start just waits for Android again.
+      }
+    } on Exception catch (e) {
+      appsError = '$e';
+    } finally {
+      loadingApps = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadCachedApps() async {
+    try {
+      apps = appSizesFromJson(
+        jsonDecode(await _appsFile!.readAsString()) as Map<String, Object?>,
+      );
+    } on Object {
+      // No earlier result, or an unreadable one: wait for Android.
+    }
+  }
+
+  AppLifecycleListener? _lifecycle;
+
+  /// Android, or a test that pretends to be (tests default to Android as
+  /// the target platform, so only an explicit override counts).
+  static bool get onAndroid =>
+      Platform.isAndroid ||
+      debugDefaultTargetPlatformOverride == TargetPlatform.android;
+
   /// Loads settings and the cached scan, then refreshes it in the background.
   Future<void> init() async {
     _configDir = (await getApplicationSupportDirectory()).path;
+    _configured = true;
     final cacheDir = (await getApplicationCacheDirectory()).path;
     core.configure(configDir: _configDir, cacheDir: cacheDir);
     protectedPaths = core.protectedPaths();
+    if (onAndroid) {
+      await _loadCachedApps();
+      _lifecycle = AppLifecycleListener(onResume: loadApps);
+      unawaited(loadApps());
+    }
     // Without Full Disk Access, start with a scan that never makes macOS
     // prompt; the header offers to grant access. Android without access
     // would only see the app's own files, so explain that first.
@@ -98,7 +191,7 @@ class AppModel extends ChangeNotifier {
     } on FileSystemException {
       // First launch: the list.
     }
-    drives = listDrives();
+    drives = await loadDrives();
     root = await _initialRoot();
     notifyListeners();
 
@@ -416,7 +509,7 @@ class AppModel extends ChangeNotifier {
     if (live || rootNode == null) return false;
     // Small gaps are rounding and metadata, not worth a tile.
     if (unscanned < unscannedThreshold) return false;
-    if (Platform.isAndroid) return true;
+    if (onAndroid) return true;
     final home = core.homeDir();
     if (home == null) return false;
     // A volume root such as `/` or `C:\` already ends in a separator.
@@ -429,8 +522,30 @@ class AppModel extends ChangeNotifier {
 
   static const unscannedThreshold = 1024 * 1024 * 1024;
 
+  /// The blocks Explore shows for [unscanned]. On Android: the apps (sized
+  /// by Android once it lets us) and what is left. Elsewhere: one block.
+  List<UnscannedPart> get unscannedParts {
+    if (!showsUnscanned) return const [];
+    final gap = unscanned;
+    // Apps live on internal storage, not on an SD card.
+    if (!onAndroid || rootDrive?.main == false) {
+      return [(kind: UnscannedKind.unknown, size: gap)];
+    }
+    final known = apps;
+    if (known == null || usageAccess == false) {
+      return [(kind: UnscannedKind.apps, size: gap)];
+    }
+    final appsTotal = known.apps.fold<int>(0, (s, a) => s + a.total);
+    final rest = gap - appsTotal;
+    return [
+      (kind: UnscannedKind.apps, size: math.min(appsTotal, gap)),
+      if (rest >= unscannedThreshold) (kind: UnscannedKind.system, size: rest),
+    ];
+  }
+
   @override
   void dispose() {
+    _lifecycle?.dispose();
     _scanSub?.cancel();
     super.dispose();
   }

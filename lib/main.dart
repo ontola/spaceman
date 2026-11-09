@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:spaceman/src/rust/frb_generated.dart';
 
@@ -56,9 +54,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _tab = 0;
-
-  static final _destinations = [
+  static List<({IconData icon, IconData active, String label})>
+  get _destinations => [
     (
       icon: Icons.folder_open_outlined,
       active: Icons.folder_open,
@@ -71,7 +68,7 @@ class _HomePageState extends State<HomePage> {
     ),
     (icon: Icons.lock_outline, active: Icons.lock, label: 'Do not touch'),
     // Android keeps apps out of reach of the file scan; see AppsScreen.
-    if (Platform.isAndroid)
+    if (AppModel.onAndroid)
       (icon: Icons.apps_outlined, active: Icons.apps, label: 'Apps'),
   ];
 
@@ -86,7 +83,7 @@ class _HomePageState extends State<HomePage> {
             body: SafeArea(child: AccessIntro(model: model)),
           );
         }
-        final page = switch (_tab) {
+        final page = switch (model.tab) {
           0 => ExplorerScreen(model: model),
           1 => CleanupScreen(model: model),
           2 => ProtectedScreen(model: model),
@@ -107,15 +104,15 @@ class _HomePageState extends State<HomePage> {
                   ScanHeader(model: model, showHelp: !wide),
                   const Divider(height: 1),
                   Expanded(child: page),
-                  if (_tab < 2) SelectionBar(model: model),
+                  if (model.tab < 2) SelectionBar(model: model),
                 ],
               );
               if (!wide) {
                 return Scaffold(
                   body: SafeArea(child: body),
                   bottomNavigationBar: NavigationBar(
-                    selectedIndex: _tab,
-                    onDestinationSelected: (i) => setState(() => _tab = i),
+                    selectedIndex: model.tab,
+                    onDestinationSelected: widget.model.showTab,
                     destinations: [
                       for (final (i, d) in _destinations.indexed)
                         NavigationDestination(
@@ -134,8 +131,8 @@ class _HomePageState extends State<HomePage> {
                 body: Row(
                   children: [
                     NavigationRail(
-                      selectedIndex: _tab,
-                      onDestinationSelected: (i) => setState(() => _tab = i),
+                      selectedIndex: model.tab,
+                      onDestinationSelected: widget.model.showTab,
                       labelType: NavigationRailLabelType.all,
                       // The logo sits flush at the bottom, out of the way of
                       // the tabs.

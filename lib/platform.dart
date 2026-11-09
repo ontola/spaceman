@@ -77,6 +77,18 @@ Future<void> requestAndroidStorageAccess() =>
 Future<String?> androidStorageRoot() =>
     _storage.invokeMethod<String>('storageRoot');
 
+/// Internal storage and mounted SD cards or USB drives: folder, the name
+/// Android gives it, and whether it is internal storage.
+Future<List<(String, String, bool)>> androidVolumes() async {
+  final list = await _storage.invokeListMethod<Map<Object?, Object?>>(
+    'storageVolumes',
+  );
+  return [
+    for (final v in list ?? const <Map<Object?, Object?>>[])
+      (v['path']! as String, v['name']! as String, v['primary']! as bool),
+  ];
+}
+
 /// Space used by one installed Android app.
 class AppSize {
   AppSize.fromMap(Map<Object?, Object?> m)
@@ -101,6 +113,15 @@ class AppSize {
   final bool system;
 
   int get total => app + data;
+
+  Map<String, Object> toMap() => {
+    'package': package,
+    'label': label,
+    'app': app,
+    'data': data,
+    'cache': cache,
+    'system': system,
+  };
 }
 
 /// Installed apps and the totals of internal storage.
@@ -113,6 +134,21 @@ Future<bool> hasUsageAccess() async =>
 /// Opens the "Usage access" setting; check again when the app resumes.
 Future<void> requestUsageAccess() =>
     _storage.invokeMethod<void>('requestUsageAccess');
+
+Map<String, Object> appSizesToJson(AppSizes s) => {
+  'apps': [for (final a in s.apps) a.toMap()],
+  'total': s.total,
+  'free': s.free,
+};
+
+AppSizes appSizesFromJson(Map<String, Object?> m) => (
+  apps: [
+    for (final a in m['apps']! as List<Object?>)
+      AppSize.fromMap(a! as Map<Object?, Object?>),
+  ],
+  total: m['total'] as int? ?? 0,
+  free: m['free'] as int? ?? 0,
+);
 
 Future<AppSizes> appSizes() async {
   final m = (await _storage.invokeMapMethod<String, Object?>('appSizes'))!;

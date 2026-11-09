@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,27 +56,34 @@ void main() {
         });
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  /// The model loads app sizes itself on Android; [AppModel.init] does
+  /// that at start and on resume, here the test calls it.
+  Future<AppModel> pump(WidgetTester tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final model = AppModel();
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: AppsScreen(model: AppModel())),
+        home: Scaffold(body: AppsScreen(model: model)),
       ),
     );
+    await tester.runAsync(model.loadApps);
     await tester.pumpAndSettle();
+    return model;
   }
 
   testWidgets('explains usage access until it is granted', (tester) async {
     usageAccess = false;
-    await pump(tester);
+    final model = await pump(tester);
     expect(find.text('Most of your space is in apps'), findsOneWidget);
     await tester.tap(find.text('Allow usage access'));
     expect(calls.last.method, 'requestUsageAccess');
 
     // Back from Settings with access granted.
     usageAccess = true;
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.runAsync(model.loadApps);
     await tester.pumpAndSettle();
     expect(find.text('Big app'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('lists apps by size, built-in ones on request', (tester) async {
@@ -98,6 +106,7 @@ void main() {
     await tester.tap(find.text('Small app'));
     expect(calls.last.method, 'openAppInfo');
     expect(calls.last.arguments, {'package': 'com.small'});
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('shows errors from Android', (tester) async {
@@ -108,5 +117,6 @@ void main() {
         });
     await pump(tester);
     expect(find.textContaining('denied'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
   });
 }
