@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:spaceman/drives.dart';
 import 'package:spaceman/src/rust/api/spaceman.dart';
 import 'package:spaceman/src/rust/frb_generated.dart';
 
@@ -316,5 +317,7 @@ class FakePathProvider extends PathProviderPlatform
 /// Sets up the fake core and path_provider for a test file.
 FakeCore setUpFakes() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  // No real disks: the app starts on the fake home folder.
+  debugDrives = () => const [];
   return FakeCore.instance;
 }

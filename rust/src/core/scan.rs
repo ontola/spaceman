@@ -93,6 +93,19 @@ struct DirTree {
     dirs: Vec<DirTree>,
 }
 
+/// Folders to leave out when scanning `root`, beyond the user's choices.
+/// On macOS the user's data lives on a second volume that shows up both in
+/// its usual places (`/Users`, `/Applications`, ...) and again under
+/// `/System/Volumes/Data`, as the very same folders. A scan of `/` would
+/// count it twice, so it skips `/System/Volumes`.
+pub fn default_skips(root: &Path) -> Vec<PathBuf> {
+    if cfg!(target_os = "macos") && root == Path::new("/") {
+        vec![PathBuf::from("/System/Volumes")]
+    } else {
+        Vec::new()
+    }
+}
+
 pub fn scan(root: &Path, opts: &ScanOptions, progress: &ScanProgress) -> Result<Tree, ScanError> {
     scan_with_cache(root, opts, progress, None)
 }

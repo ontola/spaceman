@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:spaceman/app_model.dart';
+import 'package:spaceman/drives.dart';
 import 'package:spaceman/main.dart';
 import 'package:spaceman/src/rust/api/spaceman.dart';
 import 'package:spaceman/widgets/not_scanned.dart';
@@ -381,6 +382,40 @@ void main() {
       });
       await tester.pumpAndSettle();
       expect(find.byType(UnscannedTile), findsNothing);
+    });
+
+    testWidgets('picks a drive from the menu', (tester) async {
+      final other = Directory('${tmp.path}/usb')..createSync();
+      debugDrives = () => [
+        Drive(
+          path: core.root,
+          name: 'Macintosh HD',
+          total: 500,
+          free: 100,
+          main: true,
+        ),
+        Drive(path: other.path, name: 'USB', total: 64, free: 32),
+      ];
+      addTearDown(() => debugDrives = () => const []);
+      await start(tester);
+      // The main drive is scanned by default, and named in the header and
+      // the first breadcrumb.
+      expect(model.root, core.root);
+      expect(find.text('Macintosh HD'), findsNWidgets(2));
+      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await tester.pumpAndSettle();
+      expect(find.text('32 B free of 64 B'), findsOneWidget);
+      expect(find.text('Choose folder...'), findsOneWidget);
+      await tester.tap(find.text('USB'));
+      // Remembering the choice writes a file: let real time pass.
+      for (var i = 0; i < 40 && core.lastScan?.root != other.path; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      expect(model.root, other.path);
+      expect(core.lastScan!.root, other.path);
     });
 
     testWidgets('follows a running scan', (tester) async {

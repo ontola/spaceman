@@ -729,7 +729,11 @@ class _Breadcrumbs extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(i == 0 ? lastComponent(c.name) : c.name),
+                    Text(
+                      i > 0
+                          ? c.name
+                          : model.rootDrive?.name ?? lastComponent(c.name),
+                    ),
                     Text(
                       formatBytes(c.size),
                       style: theme.textTheme.labelSmall?.copyWith(

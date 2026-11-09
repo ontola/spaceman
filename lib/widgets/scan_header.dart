@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../app_model.dart';
+import '../drives.dart';
 import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
@@ -60,20 +61,30 @@ class ScanHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  model.root,
-                  style: theme.textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (showHelp) const HelpButton(),
-              if (canPickFolder)
+              if (canPickFolder) ...[
                 IconButton(
                   tooltip: 'Choose folder',
                   onPressed: _pickFolder,
                   icon: const Icon(Icons.folder_open_outlined),
                 ),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: canPickFolder && model.drives.isNotEmpty
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: _DriveMenu(
+                          model: model,
+                          onPickFolder: _pickFolder,
+                        ),
+                      )
+                    : Text(
+                        model.root,
+                        style: theme.textTheme.titleMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+              ),
+              if (showHelp) const HelpButton(),
               if (model.scanning)
                 IconButton(
                   tooltip: 'Stop scan',
@@ -141,6 +152,95 @@ class ScanHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What is scanned, as a dropdown: the drive's name or the folder's path,
+/// with the other drives and a folder picker in the menu.
+class _DriveMenu extends StatelessWidget {
+  const _DriveMenu({required this.model, required this.onPickFolder});
+
+  final AppModel model;
+  final VoidCallback onPickFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final drive = model.rootDrive;
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 4),
+      menuChildren: [
+        for (final d in model.drives)
+          MenuItemButton(
+            leadingIcon: Icon(
+              d.path == model.root ? Icons.check : _driveIcon(d),
+              size: 20,
+            ),
+            onPressed: () => model.setRoot(d.path),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(d.name),
+                  Text(
+                    '${formatBytes(d.free)} free of ${formatBytes(d.total)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const Divider(height: 8),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.folder_open_outlined, size: 20),
+          onPressed: onPickFolder,
+          child: const Text('Choose folder...'),
+        ),
+      ],
+      builder: (context, controller, _) => InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          if (controller.isOpen) {
+            controller.close();
+          } else {
+            model.refreshDrives();
+            controller.open();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                drive == null ? Icons.folder_outlined : _driveIcon(drive),
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Tooltip(
+                  message: model.root,
+                  child: Text(
+                    drive?.name ?? model.root,
+                    style: theme.textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const Icon(Icons.arrow_drop_down),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static IconData _driveIcon(Drive d) =>
+      d.main ? Icons.computer_outlined : Icons.storage_outlined;
 }
 
 /// A small tappable label with an icon, for the status line.

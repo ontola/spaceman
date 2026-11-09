@@ -257,10 +257,10 @@ pub fn scan_dir(root: String, full: bool, skip_prompting_folders: bool, sink: St
             }
         });
         let previous = if full { None } else { previous_scan(&root) };
-        let mut opts = ScanOptions { live: show_live, ..Default::default() };
+        let mut opts = ScanOptions { live: show_live, skip: scan::default_skips(&root), ..Default::default() };
         if skip_prompting_folders {
             if let Some(h) = home() {
-                opts.skip = privacy::prompting_folders(&h);
+                opts.skip.extend(privacy::prompting_folders(&h));
             }
         }
         let r = scan::scan_with_cache(&root, &opts, &progress, previous.as_ref());

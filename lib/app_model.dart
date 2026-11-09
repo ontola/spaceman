@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'drives.dart';
 import 'paths.dart';
 import 'platform.dart';
 import 'src/rust/api/spaceman.dart' as core;
@@ -28,6 +29,19 @@ class AppModel extends ChangeNotifier {
   late String _configDir;
 
   String root = '';
+
+  /// The disks the user can pick from, the main one first.
+  List<Drive> drives = const [];
+
+  /// The drive [root] is, if it is a whole drive rather than a folder.
+  Drive? get rootDrive => drives.where((d) => d.path == root).firstOrNull;
+
+  /// Reads the disks again, e.g. when the user opens the drive menu.
+  void refreshDrives() {
+    drives = listDrives();
+    notifyListeners();
+  }
+
   core.NodeView? rootNode;
 
   /// Folder currently opened in the explorer.
@@ -84,6 +98,7 @@ class AppModel extends ChangeNotifier {
     } on FileSystemException {
       // First launch: the list.
     }
+    drives = listDrives();
     root = await _initialRoot();
     notifyListeners();
 
@@ -110,6 +125,9 @@ class AppModel extends ChangeNotifier {
       final storage = await androidStorageRoot();
       if (storage != null) return storage;
     }
+    // The whole main disk, so nothing is hidden by default.
+    final main = mainDrive(drives);
+    if (main != null) return main.path;
     return core.homeDir() ?? (await getApplicationDocumentsDirectory()).path;
   }
 
