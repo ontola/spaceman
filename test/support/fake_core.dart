@@ -43,6 +43,11 @@ class FakeCore implements RustLibApi {
   List<DeleteProgress> deleteSteps = [];
   DeleteReport Function(List<String> paths)? deleteReport;
   int cancelledDeletes = 0;
+  int pausedDeletes = 0;
+  int resumedDeletes = 0;
+
+  /// When set, a removal with progress waits for it after its steps.
+  Completer<void>? holdDelete;
 
   void reset({String root = '/home/u', Map<String, int> files = const {}}) {
     this.root = root;
@@ -70,6 +75,9 @@ class FakeCore implements RustLibApi {
     deleteSteps = [];
     deleteReport = null;
     cancelledDeletes = 0;
+    pausedDeletes = 0;
+    resumedDeletes = 0;
+    holdDelete = null;
   }
 
   void _add(String path, int size) {
@@ -222,6 +230,7 @@ class FakeCore implements RustLibApi {
     for (final step in deleteSteps) {
       yield step;
     }
+    await holdDelete?.future;
     yield DeleteProgress(
       done: paths.length,
       total: 0,
@@ -254,6 +263,12 @@ class FakeCore implements RustLibApi {
 
   @override
   void crateApiSpacemanCancelDelete() => cancelledDeletes++;
+
+  @override
+  void crateApiSpacemanPauseDelete() => pausedDeletes++;
+
+  @override
+  void crateApiSpacemanResumeDelete() => resumedDeletes++;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

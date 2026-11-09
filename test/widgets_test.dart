@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -623,6 +624,51 @@ void main() {
       expect(core.deletedPermanently, isFalse);
       expect(find.text('Removed 7.0 MB'), findsOneWidget);
       expect(find.text('Movies'), findsNothing);
+    });
+
+    testWidgets('a removal can be paused, resumed and stopped', (tester) async {
+      core.holdDelete = Completer();
+      core.deleteSteps = [
+        DeleteProgress(
+          done: 0,
+          total: 1,
+          freed: 0,
+          filesDone: 1,
+          filesTotal: 4,
+          current: at('Movies/a.mkv'),
+        ),
+      ];
+      await start(tester, list: true);
+      await selectMovies(tester);
+      await tester.tap(find.text('Delete permanently'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+      await tester.runAsync(() => pumpEventQueue());
+      await tester.pump();
+      expect(find.textContaining('Deleting 0 of 1'), findsOneWidget);
+
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+      expect(core.pausedDeletes, 1);
+      expect(find.textContaining('Paused 0 of 1'), findsOneWidget);
+      expect(find.textContaining('until you resume'), findsOneWidget);
+
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+      expect(core.resumedDeletes, 1);
+      expect(find.textContaining('Deleting 0 of 1'), findsOneWidget);
+
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
+      expect(core.cancelledDeletes, 1);
+      expect(find.text('Stopping after this file...'), findsOneWidget);
+
+      core.holdDelete!.complete();
+      await tester.runAsync(() => pumpEventQueue());
+      await tester.pumpAndSettle();
+      expect(find.text('Removed 7.0 MB'), findsOneWidget);
     });
 
     testWidgets('permanent removal warns and lists failures', (tester) async {

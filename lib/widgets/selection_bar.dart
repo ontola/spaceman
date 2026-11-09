@@ -123,6 +123,12 @@ class _DeleteProgressDialog extends StatefulWidget {
 
 class _DeleteProgressDialogState extends State<_DeleteProgressDialog> {
   bool _stopping = false;
+  bool _paused = false;
+
+  void _togglePause() {
+    setState(() => _paused = !_paused);
+    _paused ? pauseDelete() : resumeDelete();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +145,11 @@ class _DeleteProgressDialogState extends State<_DeleteProgressDialog> {
             : p.total > 0
             ? p.done / p.total
             : null;
-        final verb = widget.toTrash ? 'Moving' : 'Deleting';
+        final verb = _paused && !_stopping
+            ? 'Paused'
+            : widget.toTrash
+            ? 'Moving'
+            : 'Deleting';
         return AlertDialog(
           title: Text(
             p == null
@@ -153,10 +163,16 @@ class _DeleteProgressDialogState extends State<_DeleteProgressDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                LinearProgressIndicator(value: value),
+                // A paused bar without a value would keep sweeping.
+                LinearProgressIndicator(value: _paused ? value ?? 0 : value),
                 const SizedBox(height: 12),
                 Text(
-                  _stopping ? 'Stopping after this file...' : p?.current ?? '',
+                  _stopping
+                      ? 'Stopping after this file...'
+                      : _paused
+                      ? 'Paused after this ${widget.toTrash ? 'item' : 'file'}. '
+                            'Nothing else is removed until you resume.'
+                      : p?.current ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -167,6 +183,11 @@ class _DeleteProgressDialogState extends State<_DeleteProgressDialog> {
             ),
           ),
           actions: [
+            TextButton.icon(
+              onPressed: _stopping ? null : _togglePause,
+              icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+              label: Text(_paused ? 'Resume' : 'Pause'),
+            ),
             TextButton(
               onPressed: _stopping
                   ? null
