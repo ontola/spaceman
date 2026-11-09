@@ -8,6 +8,7 @@ import '../app_model.dart';
 import '../format.dart';
 import '../paths.dart';
 import '../src/rust/api/spaceman.dart';
+import '../widgets/item_actions.dart';
 import '../widgets/not_scanned.dart';
 import '../widgets/row_controls.dart';
 import '../widgets/treemap.dart';
@@ -459,6 +460,11 @@ class _ExplorerScreenState extends State<ExplorerScreen>
                   ),
                 ),
               ),
+              const Divider(height: 1),
+              FolderBar(
+                model: model,
+                folder: crumbs.isEmpty ? model.rootNode! : crumbs.last,
+              ),
             ],
           ),
         ),
@@ -625,14 +631,30 @@ class _ExplorerScreenState extends State<ExplorerScreen>
           onExit: (_) {
             if (_hovered?.path == node.path) _hovered = null;
           },
-          child: _NodeRow(
-            key: focused ? _focusKey : null,
-            model: model,
-            node: node,
-            fraction: largest > 0 ? node.size / largest : 0,
-            share: current.size > 0 ? node.size / current.size : 0,
-            onOpen: _go,
-            focused: focused,
+          child: GestureDetector(
+            onSecondaryTapUp: (d) => showItemMenu(
+              context,
+              model,
+              node,
+              d.globalPosition,
+              onOpen: _go,
+            ),
+            onLongPressStart: (d) => showItemMenu(
+              context,
+              model,
+              node,
+              d.globalPosition,
+              onOpen: _go,
+            ),
+            child: _NodeRow(
+              key: focused ? _focusKey : null,
+              model: model,
+              node: node,
+              fraction: largest > 0 ? node.size / largest : 0,
+              share: current.size > 0 ? node.size / current.size : 0,
+              onOpen: _go,
+              focused: focused,
+            ),
           ),
         );
       },

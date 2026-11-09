@@ -286,18 +286,41 @@ class AppModel extends ChangeNotifier {
       selectionRoots.fold(0, (sum, node) => sum + node.size);
 
   /// Whether removing the selection empties the Trash for good.
-  bool get selectionEmptiesTrash => suggestions.any(
-    (sug) =>
-        sug.removal == core.RemovalMode.emptyTrash &&
-        selection.containsKey(sug.node.path),
-  );
+  bool get selectionEmptiesTrash => emptiesTrash(selectionRoots);
+
+  /// Whether removing [items] empties the Trash for good.
+  bool emptiesTrash(Iterable<core.NodeView> items) {
+    final paths = {for (final n in items) n.path};
+    return suggestions.any(
+      (sug) =>
+          sug.removal == core.RemovalMode.emptyTrash &&
+          paths.contains(sug.node.path),
+    );
+  }
+
+  /// Whether [node] may be ticked, protected and removed: not while a
+  /// first scan runs, not the scan's own folder, nor what is marked do
+  /// not touch.
+  bool canRemove(core.NodeView node) =>
+      !live &&
+      node.id != rootNode?.id &&
+      node.kind != core.EntryKind.smallFiles &&
+      node.protection == core.ProtectionState.none;
 
   /// Removes the selection, reporting progress to [onProgress] as it goes.
   Future<core.DeleteReport> deleteSelection({
     bool permanent = false,
     void Function(core.DeleteProgress)? onProgress,
+  }) =>
+      deleteItems(selectionRoots, permanent: permanent, onProgress: onProgress);
+
+  /// Removes [items], reporting progress to [onProgress] as it goes.
+  Future<core.DeleteReport> deleteItems(
+    List<core.NodeView> items, {
+    bool permanent = false,
+    void Function(core.DeleteProgress)? onProgress,
   }) async {
-    final paths = selectionRoots.map((n) => n.path).toList();
+    final paths = items.map((n) => n.path).toList();
     late core.DeleteReport report;
     await for (final p in core.deletePathsWithProgress(
       paths: paths,

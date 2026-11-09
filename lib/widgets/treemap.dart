@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import '../app_model.dart';
 import '../format.dart';
 import '../palette.dart';
-import '../platform.dart';
 import '../src/rust/api/spaceman.dart';
-import 'fly_to.dart';
+import 'item_actions.dart';
 import 'not_scanned.dart';
 import 'squarify.dart';
 
@@ -222,55 +221,10 @@ class TreemapState extends State<Treemap> {
     return null;
   }
 
-  static PopupMenuItem<String> _item(
-    String value,
-    IconData icon,
-    String label,
-  ) => PopupMenuItem(
-    value: value,
-    child: Row(
-      children: [
-        Icon(icon, size: 18),
-        const SizedBox(width: 12),
-        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-      ],
-    ),
-  );
-
   Future<void> _menu(BuildContext context, Offset global, _Tile tile) async {
     final node = tile.node;
     if (node == null) return;
-    final selectable = !model.live && node.protection == ProtectionState.none;
-    final selected = model.isSelected(node.path);
-    final choice = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(global.dx, global.dy, global.dx, 0),
-      items: [
-        if (node.kind == EntryKind.dir && node.hasChildren)
-          _item('open', Icons.folder_open, 'Open'),
-        if (selectable)
-          _item(
-            'select',
-            selected ? Icons.check_box : Icons.check_box_outline_blank,
-            selected ? 'Unselect' : 'Select',
-          ),
-        if (selectable) _item('protect', Icons.lock_outline, 'Do not touch'),
-        if (canReveal)
-          _item('reveal', Icons.open_in_new, 'Show in $fileManagerName'),
-      ],
-    );
-    if (!context.mounted) return;
-    switch (choice) {
-      case 'open':
-        widget.onOpen(node.id);
-      case 'select':
-        model.setSelected(node, !selected);
-      case 'protect':
-        flyToDoNotTouch(context, node.name);
-        model.protect(node.path);
-      case 'reveal':
-        reveal(node.path);
-    }
+    await showItemMenu(context, model, node, global, onOpen: widget.onOpen);
   }
 
   @override

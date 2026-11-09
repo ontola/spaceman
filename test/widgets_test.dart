@@ -9,7 +9,9 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:spaceman/app_model.dart';
 import 'package:spaceman/drives.dart';
 import 'package:spaceman/main.dart';
+import 'package:spaceman/platform.dart';
 import 'package:spaceman/src/rust/api/spaceman.dart';
+import 'package:spaceman/widgets/item_actions.dart';
 import 'package:spaceman/widgets/not_scanned.dart';
 import 'package:spaceman/widgets/treemap.dart';
 
@@ -244,6 +246,65 @@ void main() {
     await tester.tap(find.text('Do not touch').last);
     await tester.pumpAndSettle();
     expect(core.protectedList, [at('Movies/film.mkv')]);
+  });
+
+  group('item actions', () {
+    testWidgets('right-click on a row offers everything', (tester) async {
+      await start(tester, list: true);
+      await tester.tapAt(
+        tester.getCenter(find.text('Movies')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      for (final label in [
+        'Open',
+        'Select',
+        'Do not touch',
+        'Show in $fileManagerName',
+        'Move to Trash',
+        'Delete permanently',
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byType(PopupMenuItem<ItemAction>),
+            matching: find.text(label),
+          ),
+          findsOneWidget,
+          reason: label,
+        );
+      }
+      // Removing from the menu removes just that item, after confirming.
+      await tester.tap(find.text('Delete permanently').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Delete "Movies" permanently?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+      await tester.runAsync(() => pumpEventQueue());
+      await tester.pumpAndSettle();
+      expect(core.deleted, [at('Movies')]);
+      expect(core.deletedPermanently, isTrue);
+      expect(model.selection, isEmpty);
+    });
+
+    testWidgets('the bar acts on the open folder', (tester) async {
+      await start(tester, list: true);
+      // The scanned folder itself can not be removed.
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.delete_outline),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Select this folder'));
+      await tester.pumpAndSettle();
+      expect(model.selection.keys, [at('Movies')]);
+      await tester.tap(find.byTooltip('Move to Trash this folder'));
+      await tester.pumpAndSettle();
+      expect(find.text('Move "Movies" to the Trash?'), findsOneWidget);
+    });
   });
 
   group('going up', () {
