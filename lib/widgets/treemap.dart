@@ -311,7 +311,9 @@ class TreemapState extends State<Treemap> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Text(
             _hover == null
-                ? 'Click a folder to open it. Right-click for more.'
+                ? AppModel.onAndroid
+                      ? 'Tap a folder to open it. Long-press for more.'
+                      : 'Click a folder to open it. Right-click for more.'
                 : _hover!.unseen
                 ? unscannedHint(_hover!.part!)
                 : _hover!.node == null
