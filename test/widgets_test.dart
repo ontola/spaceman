@@ -322,6 +322,22 @@ void main() {
       expect(model.currentId, 0);
     });
 
+    testWidgets('back goes up a folder, then to Explore', (tester) async {
+      await start(tester, list: true);
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      // Android's back button; true means the app handled it and stays.
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+      expect(model.currentId, 0);
+
+      model.showTab(2);
+      await tester.pumpAndSettle();
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+      expect(model.tab, 0);
+    });
+
     testWidgets('pulling the list past its top goes up', (tester) async {
       await start(tester, list: true);
       await tester.tap(find.text('Movies'));
