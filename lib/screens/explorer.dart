@@ -8,6 +8,8 @@ import '../app_model.dart';
 import '../format.dart';
 import '../paths.dart';
 import '../src/rust/api/spaceman.dart';
+import '../widgets/item_actions.dart';
+import '../widgets/not_scanned.dart';
 import '../widgets/row_controls.dart';
 import '../widgets/treemap.dart';
 
@@ -458,6 +460,11 @@ class _ExplorerScreenState extends State<ExplorerScreen>
                   ),
                 ),
               ),
+              const Divider(height: 1),
+              FolderBar(
+                model: model,
+                folder: crumbs.isEmpty ? model.rootNode! : crumbs.last,
+              ),
             ],
           ),
         ),
@@ -588,10 +595,21 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
     final items = _items(current.id);
-    final largest = items.isEmpty ? 1 : items.first.size;
+    // At the top of the scan, the space it did not see is a row too, in
+    // its place by size.
+    final unscanned = current.id == Treemap.rootId && model.showsUnscanned
+        ? model.unscanned
+        : 0;
+    final unscannedAt = unscanned == 0
+        ? -1
+        : switch (items.indexWhere((n) => n.size < unscanned)) {
+            -1 => items.length,
+            final i => i,
+          };
+    final largest = math.max(items.isEmpty ? 1 : items.first.size, unscanned);
     final list = ListView.builder(
       key: PageStorageKey(id),
-      itemCount: items.length + 1,
+      itemCount: items.length + 1 + (unscanned > 0 ? 1 : 0),
       itemBuilder: (context, i) {
         if (i == 0) {
           return Padding(
@@ -602,21 +620,41 @@ class _ExplorerScreenState extends State<ExplorerScreen>
             ),
           );
         }
-        final node = items[i - 1];
+        if (i - 1 == unscannedAt) {
+          return UnscannedRow(model: model, fraction: unscanned / largest);
+        }
+        final node =
+            items[i - 1 - (unscannedAt >= 0 && i - 1 > unscannedAt ? 1 : 0)];
         final focused = id == model.currentId && node.path == _focusPath;
         return MouseRegion(
           onEnter: (_) => _hovered = node,
           onExit: (_) {
             if (_hovered?.path == node.path) _hovered = null;
           },
-          child: _NodeRow(
-            key: focused ? _focusKey : null,
-            model: model,
-            node: node,
-            fraction: largest > 0 ? node.size / largest : 0,
-            share: current.size > 0 ? node.size / current.size : 0,
-            onOpen: _go,
-            focused: focused,
+          child: GestureDetector(
+            onSecondaryTapUp: (d) => showItemMenu(
+              context,
+              model,
+              node,
+              d.globalPosition,
+              onOpen: _go,
+            ),
+            onLongPressStart: (d) => showItemMenu(
+              context,
+              model,
+              node,
+              d.globalPosition,
+              onOpen: _go,
+            ),
+            child: _NodeRow(
+              key: focused ? _focusKey : null,
+              model: model,
+              node: node,
+              fraction: largest > 0 ? node.size / largest : 0,
+              share: current.size > 0 ? node.size / current.size : 0,
+              onOpen: _go,
+              focused: focused,
+            ),
           ),
         );
       },
@@ -694,6 +732,7 @@ class _Breadcrumbs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     // Left-aligned while it fits; once too long it scrolls, keeping the
     // current folder (the end) in view.
     return Align(
@@ -708,7 +747,24 @@ class _Breadcrumbs extends StatelessWidget {
               if (i > 0) const Icon(Icons.chevron_right, size: 18),
               TextButton(
                 onPressed: () => onOpen(c.id),
-                child: Text(i == 0 ? lastComponent(c.name) : c.name),
+                // The size of each folder on the way, small under its name.
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      i > 0
+                          ? c.name
+                          : model.rootDrive?.name ?? lastComponent(c.name),
+                    ),
+                    Text(
+                      formatBytes(c.size),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],

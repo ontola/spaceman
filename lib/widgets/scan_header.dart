@@ -1,14 +1,13 @@
-import 'dart:io';
-
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../app_model.dart';
+import '../drives.dart';
 import '../format.dart';
 import '../platform.dart';
 import '../src/rust/api/spaceman.dart' as core;
 import 'help.dart';
-import 'row_controls.dart';
+import 'not_scanned.dart';
 
 /// Top bar: which folder is scanned, disk usage and scan controls.
 class ScanHeader extends StatelessWidget {
@@ -62,20 +61,30 @@ class ScanHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  model.root,
-                  style: theme.textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (showHelp) const HelpButton(),
-              if (canPickFolder)
+              if (canPickFolder) ...[
                 IconButton(
                   tooltip: 'Choose folder',
                   onPressed: _pickFolder,
                   icon: const Icon(Icons.folder_open_outlined),
                 ),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: canPickFolder && model.drives.isNotEmpty
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: _DriveMenu(
+                          model: model,
+                          onPickFolder: _pickFolder,
+                        ),
+                      )
+                    : Text(
+                        model.root,
+                        style: theme.textTheme.titleMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+              ),
+              if (showHelp) const HelpButton(),
               if (model.scanning)
                 IconButton(
                   tooltip: 'Stop scan',
@@ -145,6 +154,95 @@ class ScanHeader extends StatelessWidget {
   }
 }
 
+/// What is scanned, as a dropdown: the drive's name or the folder's path,
+/// with the other drives and a folder picker in the menu.
+class _DriveMenu extends StatelessWidget {
+  const _DriveMenu({required this.model, required this.onPickFolder});
+
+  final AppModel model;
+  final VoidCallback onPickFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final drive = model.rootDrive;
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 4),
+      menuChildren: [
+        for (final d in model.drives)
+          MenuItemButton(
+            leadingIcon: Icon(
+              d.path == model.root ? Icons.check : _driveIcon(d),
+              size: 20,
+            ),
+            onPressed: () => model.setRoot(d.path),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(d.name),
+                  Text(
+                    '${formatBytes(d.free)} free of ${formatBytes(d.total)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const Divider(height: 8),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.folder_open_outlined, size: 20),
+          onPressed: onPickFolder,
+          child: const Text('Choose folder...'),
+        ),
+      ],
+      builder: (context, controller, _) => InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          if (controller.isOpen) {
+            controller.close();
+          } else {
+            model.refreshDrives();
+            controller.open();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                drive == null ? Icons.folder_outlined : _driveIcon(drive),
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Tooltip(
+                  message: model.root,
+                  child: Text(
+                    drive?.name ?? model.root,
+                    style: theme.textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const Icon(Icons.arrow_drop_down),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static IconData _driveIcon(Drive d) =>
+      d.main ? Icons.computer_outlined : Icons.storage_outlined;
+}
+
 /// A small tappable label with an icon, for the status line.
 class _Chip extends StatelessWidget {
   const _Chip({
@@ -198,13 +296,10 @@ class _NotScanned extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final root = model.rootNode;
-    if (root == null) return const SizedBox.shrink();
+    if (model.rootNode == null) return const SizedBox.shrink();
     final unreadable = core.unreadableFolders();
-    final disk = model.diskSpace;
-    final outside = disk == null ? 0 : disk.total - disk.free - root.size;
-    // Small differences are rounding and metadata, not worth a mention.
-    final showOutside = outside > 1024 * 1024 * 1024;
+    final outside = model.unscanned;
+    final showOutside = outside >= AppModel.unscannedThreshold;
     if (unreadable.isEmpty && !showOutside) return const SizedBox.shrink();
 
     final label = showOutside
@@ -213,15 +308,7 @@ class _NotScanned extends StatelessWidget {
               'unreadable';
     return InkWell(
       borderRadius: BorderRadius.circular(4),
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (context) => _NotScannedDialog(
-          root: model.root,
-          scanned: root.size,
-          outside: showOutside ? outside : 0,
-          unreadable: unreadable,
-        ),
-      ),
+      onTap: () => showNotScanned(context, model),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
@@ -232,83 +319,6 @@ class _NotScanned extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NotScannedDialog extends StatelessWidget {
-  const _NotScannedDialog({
-    required this.root,
-    required this.scanned,
-    required this.outside,
-    required this.unreadable,
-  });
-
-  final String root;
-  final int scanned;
-  final int outside;
-  final List<String> unreadable;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      title: const Text('Not in this scan'),
-      content: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (outside > 0)
-              Text(
-                Platform.isAndroid
-                    ? 'The scan of $root found ${formatBytes(scanned)}. '
-                          'Another ${formatBytes(outside)} of the phone is in '
-                          'use outside it: mostly apps and their data, and '
-                          'Android itself. See the Apps tab for the size of '
-                          'each app.'
-                    : 'The scan of $root found ${formatBytes(scanned)}. '
-                          'Another ${formatBytes(outside)} of the disk is in '
-                          'use outside it: other folders, macOS itself, apps, '
-                          'other users, local snapshots, and folders that '
-                          'could not be read. Their exact size is unknown, '
-                          'because what can not be read can not be measured.',
-                style: theme.textTheme.bodyMedium,
-              ),
-            if (unreadable.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                unreadable.length >= 200
-                    ? 'First 200 folders that could not be read:'
-                    : 'Folders that could not be read:',
-                style: theme.textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final path in unreadable)
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(path, overflow: TextOverflow.ellipsis),
-                        trailing: RevealButton(path: path),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
     );
   }
 }

@@ -1,13 +1,18 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:spaceman/app_model.dart';
+import 'package:spaceman/drives.dart';
 import 'package:spaceman/main.dart';
+import 'package:spaceman/platform.dart';
 import 'package:spaceman/src/rust/api/spaceman.dart';
+import 'package:spaceman/widgets/item_actions.dart';
+import 'package:spaceman/widgets/not_scanned.dart';
 import 'package:spaceman/widgets/treemap.dart';
 
 import 'support/fake_core.dart';
@@ -125,6 +130,10 @@ void main() {
       expect(find.text('film.mkv'), findsOneWidget);
       expect(model.currentId, core.idOf(at('Movies')));
 
+      // Each breadcrumb shows its folder's size under its name.
+      expect(find.widgetWithText(TextButton, '7.0 MB'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, '12.0 MB'), findsOneWidget);
+
       // The breadcrumb of the root shows its last path component.
       await tester.tap(find.widgetWithText(TextButton, 'home'));
       await tester.pumpAndSettle();
@@ -239,6 +248,65 @@ void main() {
     expect(core.protectedList, [at('Movies/film.mkv')]);
   });
 
+  group('item actions', () {
+    testWidgets('right-click on a row offers everything', (tester) async {
+      await start(tester, list: true);
+      await tester.tapAt(
+        tester.getCenter(find.text('Movies')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      for (final label in [
+        'Open',
+        'Select',
+        'Do not touch',
+        'Show in $fileManagerName',
+        'Move to Trash',
+        'Delete permanently',
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byType(PopupMenuItem<ItemAction>),
+            matching: find.text(label),
+          ),
+          findsOneWidget,
+          reason: label,
+        );
+      }
+      // Removing from the menu removes just that item, after confirming.
+      await tester.tap(find.text('Delete permanently').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Delete "Movies" permanently?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete permanently'));
+      await tester.runAsync(() => pumpEventQueue());
+      await tester.pumpAndSettle();
+      expect(core.deleted, [at('Movies')]);
+      expect(core.deletedPermanently, isTrue);
+      expect(model.selection, isEmpty);
+    });
+
+    testWidgets('the bar acts on the open folder', (tester) async {
+      await start(tester, list: true);
+      // The scanned folder itself can not be removed.
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.delete_outline),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Select this folder'));
+      await tester.pumpAndSettle();
+      expect(model.selection.keys, [at('Movies')]);
+      await tester.tap(find.byTooltip('Move to Trash this folder'));
+      await tester.pumpAndSettle();
+      expect(find.text('Move "Movies" to the Trash?'), findsOneWidget);
+    });
+  });
+
   group('going up', () {
     testWidgets('the treemap is the default view', (tester) async {
       await start(tester);
@@ -305,6 +373,110 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Folders that could not be read:'), findsOneWidget);
       expect(find.text(at('locked')), findsOneWidget);
+    });
+
+    testWidgets('shows the space it did not see as a tile', (tester) async {
+      // 20 GB in use on disk, about 12 MB of it scanned.
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester);
+      expect(find.textContaining('GB not scanned'), findsOneWidget);
+      expect(find.byType(UnscannedTile), findsOneWidget);
+      expect(find.text('Not scanned'), findsOneWidget);
+      expect(find.textContaining('about 2'), findsOneWidget);
+      // Clicking it explains what it is.
+      await tester.tap(find.text('Not scanned'));
+      await tester.pumpAndSettle();
+      expect(find.text('Not in this scan'), findsOneWidget);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Inside a folder there is no such tile.
+      model.open(core.idOf(at('Movies')));
+      await tester.pumpAndSettle();
+      expect(find.byType(UnscannedTile), findsNothing);
+    });
+
+    testWidgets('offers Full Disk Access on macOS without it', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      core.fullDiskAccess = false;
+      await start(tester);
+      expect(
+        find.text('Protected folders, macOS, apps and other users'),
+        findsOneWidget,
+      );
+      expect(find.text('Grant Full Disk Access'), findsOneWidget);
+      await tester.tap(find.text('Why?'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('folders macOS protects'), findsOneWidget);
+      expect(find.text('Grant Full Disk Access'), findsNWidgets(2));
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('lists the space it did not see in its place', (tester) async {
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester, list: true);
+      final rows = find.byType(ListTile);
+      expect(
+        tester.widget(rows.first),
+        isA<ListTile>().having((t) => t.onTap, 'onTap', isNotNull),
+      );
+      expect(find.byType(UnscannedRow), findsOneWidget);
+      expect(find.textContaining('~'), findsOneWidget);
+      expect(find.text('estimate'), findsOneWidget);
+      // Biggest first: above Movies.
+      expect(
+        tester.getTopLeft(find.byType(UnscannedRow)).dy,
+        lessThan(tester.getTopLeft(rowOf('Movies')).dy),
+      );
+    });
+
+    testWidgets('no tile for a folder smaller than home', (tester) async {
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester);
+      expect(find.byType(UnscannedTile), findsOneWidget);
+      await tester.runAsync(() async {
+        await model.setRoot(at('code'));
+        core.scan!.add(scanUpdate(files: 2, done: true));
+        await pumpEventQueue();
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(UnscannedTile), findsNothing);
+    });
+
+    testWidgets('picks a drive from the menu', (tester) async {
+      final other = Directory('${tmp.path}/usb')..createSync();
+      debugDrives = () => [
+        Drive(
+          path: core.root,
+          name: 'Macintosh HD',
+          total: 500,
+          free: 100,
+          main: true,
+        ),
+        Drive(path: other.path, name: 'USB', total: 64, free: 32),
+      ];
+      addTearDown(() => debugDrives = () => const []);
+      await start(tester);
+      // The main drive is scanned by default, and named in the header and
+      // the first breadcrumb.
+      expect(model.root, core.root);
+      expect(find.text('Macintosh HD'), findsNWidgets(2));
+      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await tester.pumpAndSettle();
+      expect(find.text('32 B free of 64 B'), findsOneWidget);
+      expect(find.text('Choose folder...'), findsOneWidget);
+      await tester.tap(find.text('USB'));
+      // Remembering the choice writes a file: let real time pass.
+      for (var i = 0; i < 40 && core.lastScan?.root != other.path; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      expect(model.root, other.path);
+      expect(core.lastScan!.root, other.path);
     });
 
     testWidgets('follows a running scan', (tester) async {

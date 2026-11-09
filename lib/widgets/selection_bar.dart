@@ -88,7 +88,7 @@ class _SelectionBarState extends State<SelectionBar> {
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
                     onPressed: () =>
-                        _confirmAndDelete(context, model, permanent: true),
+                        confirmAndDelete(context, model, permanent: true),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: theme.colorScheme.error,
                     ),
@@ -98,7 +98,7 @@ class _SelectionBarState extends State<SelectionBar> {
                 ],
                 const SizedBox(width: 8),
                 FilledButton.icon(
-                  onPressed: () => _confirmAndDelete(context, model),
+                  onPressed: () => confirmAndDelete(context, model),
                   icon: const Icon(Icons.delete_outline),
                   label: Text(hasTrash ? 'Move to $trashName' : 'Delete'),
                 ),
@@ -183,19 +183,21 @@ class _DeleteProgressDialogState extends State<_DeleteProgressDialog> {
   }
 }
 
-/// Asks for confirmation, removes the selection and reports the result.
-/// With [permanent] (or without a trash) nothing can be restored.
-Future<void> _confirmAndDelete(
+/// Asks for confirmation, removes [items] (the selection by default) and
+/// reports the result. With [permanent] (or without a trash) nothing can be
+/// restored.
+Future<void> confirmAndDelete(
   BuildContext context,
   AppModel model, {
+  List<NodeView>? items,
   bool permanent = false,
 }) async {
   final toTrash = hasTrash && !permanent;
-  final items = model.selectionRoots;
-  final total = model.selectionSize;
-  final what = items.length == 1
-      ? '"${items.single.name}"'
-      : '${items.length} items';
+  final List<NodeView> chosen = items ?? model.selectionRoots;
+  final total = chosen.fold<int>(0, (s, n) => s + n.size);
+  final what = chosen.length == 1
+      ? '"${chosen.single.name}"'
+      : '${chosen.length} items';
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -206,7 +208,7 @@ Future<void> _confirmAndDelete(
         toTrash
             ? 'This frees up to ${formatBytes(total)} once the $trashName is emptied. '
                   'You can still restore it from the $trashName.'
-                  '${model.selectionEmptiesTrash ? '\n\nThe current contents of the $trashName are deleted for good.' : ''}'
+                  '${model.emptiesTrash(chosen) ? '\n\nThe current contents of the $trashName are deleted for good.' : ''}'
             : 'This frees ${formatBytes(total)}. This cannot be undone.',
       ),
       actions: [
@@ -242,7 +244,8 @@ Future<void> _confirmAndDelete(
   );
   final DeleteReport report;
   try {
-    report = await model.deleteSelection(
+    report = await model.deleteItems(
+      chosen,
       permanent: permanent,
       onProgress: (p) => progress.value = p,
     );

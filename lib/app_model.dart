@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'drives.dart';
 import 'paths.dart';
 import 'platform.dart';
 import 'src/rust/api/spaceman.dart' as core;
@@ -27,6 +29,19 @@ class AppModel extends ChangeNotifier {
   late String _configDir;
 
   String root = '';
+
+  /// The disks the user can pick from, the main one first.
+  List<Drive> drives = const [];
+
+  /// The drive [root] is, if it is a whole drive rather than a folder.
+  Drive? get rootDrive => drives.where((d) => d.path == root).firstOrNull;
+
+  /// Reads the disks again, e.g. when the user opens the drive menu.
+  void refreshDrives() {
+    drives = listDrives();
+    notifyListeners();
+  }
+
   core.NodeView? rootNode;
 
   /// Folder currently opened in the explorer.
@@ -83,6 +98,7 @@ class AppModel extends ChangeNotifier {
     } on FileSystemException {
       // First launch: the list.
     }
+    drives = listDrives();
     root = await _initialRoot();
     notifyListeners();
 
@@ -109,6 +125,9 @@ class AppModel extends ChangeNotifier {
       final storage = await androidStorageRoot();
       if (storage != null) return storage;
     }
+    // The whole main disk, so nothing is hidden by default.
+    final main = mainDrive(drives);
+    if (main != null) return main.path;
     return core.homeDir() ?? (await getApplicationDocumentsDirectory()).path;
   }
 
@@ -267,18 +286,41 @@ class AppModel extends ChangeNotifier {
       selectionRoots.fold(0, (sum, node) => sum + node.size);
 
   /// Whether removing the selection empties the Trash for good.
-  bool get selectionEmptiesTrash => suggestions.any(
-    (sug) =>
-        sug.removal == core.RemovalMode.emptyTrash &&
-        selection.containsKey(sug.node.path),
-  );
+  bool get selectionEmptiesTrash => emptiesTrash(selectionRoots);
+
+  /// Whether removing [items] empties the Trash for good.
+  bool emptiesTrash(Iterable<core.NodeView> items) {
+    final paths = {for (final n in items) n.path};
+    return suggestions.any(
+      (sug) =>
+          sug.removal == core.RemovalMode.emptyTrash &&
+          paths.contains(sug.node.path),
+    );
+  }
+
+  /// Whether [node] may be ticked, protected and removed: not while a
+  /// first scan runs, not the scan's own folder, nor what is marked do
+  /// not touch.
+  bool canRemove(core.NodeView node) =>
+      !live &&
+      node.id != rootNode?.id &&
+      node.kind != core.EntryKind.smallFiles &&
+      node.protection == core.ProtectionState.none;
 
   /// Removes the selection, reporting progress to [onProgress] as it goes.
   Future<core.DeleteReport> deleteSelection({
     bool permanent = false,
     void Function(core.DeleteProgress)? onProgress,
+  }) =>
+      deleteItems(selectionRoots, permanent: permanent, onProgress: onProgress);
+
+  /// Removes [items], reporting progress to [onProgress] as it goes.
+  Future<core.DeleteReport> deleteItems(
+    List<core.NodeView> items, {
+    bool permanent = false,
+    void Function(core.DeleteProgress)? onProgress,
   }) async {
-    final paths = selectionRoots.map((n) => n.path).toList();
+    final paths = items.map((n) => n.path).toList();
     late core.DeleteReport report;
     await for (final p in core.deletePathsWithProgress(
       paths: paths,
@@ -354,6 +396,38 @@ class AppModel extends ChangeNotifier {
 
   core.DiskSpace? get diskSpace =>
       root.isEmpty ? null : core.diskSpace(path: root);
+
+  /// Disk space in use that the scan does not account for: folders it
+  /// skipped or could not read, the system, apps, other users, snapshots.
+  /// An estimate: what is used on the disk minus what the scan found.
+  int get unscanned {
+    final disk = diskSpace;
+    final scanned = rootNode?.size;
+    if (disk == null || scanned == null || disk.total <= 0) return 0;
+    return math.max(0, disk.total - disk.free - scanned);
+  }
+
+  /// Whether Explore shows [unscanned] as an item of its own at the top of
+  /// the scan. Only when the scan covers the home folder (or all of
+  /// Android's storage): for a smaller folder most of the disk lies
+  /// outside it, and showing that would only crowd out what was asked for.
+  /// Not while a first scan grows either: the gap shrinks as it goes.
+  bool get showsUnscanned {
+    if (live || rootNode == null) return false;
+    // Small gaps are rounding and metadata, not worth a tile.
+    if (unscanned < unscannedThreshold) return false;
+    if (Platform.isAndroid) return true;
+    final home = core.homeDir();
+    if (home == null) return false;
+    // A volume root such as `/` or `C:\` already ends in a separator.
+    final covers =
+        root == home ||
+        isInside(home, root) ||
+        (root.endsWith('/') || root.endsWith(r'\')) && home.startsWith(root);
+    return covers;
+  }
+
+  static const unscannedThreshold = 1024 * 1024 * 1024;
 
   @override
   void dispose() {
