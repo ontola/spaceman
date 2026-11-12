@@ -18,81 +18,85 @@ class AppsScreen extends StatefulWidget {
   State<AppsScreen> createState() => _AppsScreenState();
 }
 
-class _AppsScreenState extends State<AppsScreen> with WidgetsBindingObserver {
-  bool? _access;
-  AppSizes? _sizes;
-  String? _error;
+class _AppsScreenState extends State<AppsScreen> {
   bool _showSystem = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _load();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  /// Back from Settings: access may be granted, or an app cleared or
-  /// uninstalled.
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
-  }
-
-  Future<void> _load() async {
-    final access = await hasUsageAccess();
-    if (!mounted) return;
-    setState(() => _access = access);
-    if (!access) return;
-    try {
-      final sizes = await appSizes();
-      if (!mounted) return;
-      setState(() {
-        _sizes = sizes;
-        _error = null;
-      });
-    } on Exception catch (e) {
-      if (mounted) setState(() => _error = '$e');
-    }
-  }
+  AppModel get model => widget.model;
 
   @override
   Widget build(BuildContext context) {
-    final access = _access;
-    if (access == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (!access) return const _UsageAccessIntro();
-    if (_error != null) return Center(child: Text(_error!));
-    final sizes = _sizes;
-    if (sizes == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final apps = sizes.apps.where((a) => _showSystem || !a.system).toList()
-      ..sort((a, b) => b.total.compareTo(a.total));
-    final largest = apps.isEmpty ? 1 : apps.first.total;
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        itemCount: apps.length + 1,
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return _Summary(
-              sizes: sizes,
-              files: widget.model.rootNode?.size ?? 0,
-              showSystem: _showSystem,
-              onShowSystem: (v) => setState(() => _showSystem = v),
-            );
+    return ListenableBuilder(
+      listenable: model,
+      builder: (context, _) {
+        final access = model.usageAccess;
+        final sizes = model.apps;
+        if (access == false) return const _UsageAccessIntro();
+        if (sizes == null) {
+          if (model.appsError != null) {
+            return Center(child: Text(model.appsError!));
           }
-          final app = apps[i - 1];
-          return _AppRow(app: app, fraction: app.total / largest);
-        },
+          return const _Loading();
+        }
+
+        final apps = sizes.apps.where((a) => _showSystem || !a.system).toList()
+          ..sort((a, b) => b.total.compareTo(a.total));
+        final largest = apps.isEmpty ? 1 : apps.first.total;
+        return RefreshIndicator(
+          onRefresh: model.loadApps,
+          child: ListView.builder(
+            itemCount: apps.length + 1,
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                return _Summary(
+                  sizes: sizes,
+                  files: model.rootNode?.size ?? 0,
+                  refreshing: model.loadingApps,
+                  showSystem: _showSystem,
+                  onShowSystem: (v) => setState(() => _showSystem = v),
+                );
+              }
+              final app = apps[i - 1];
+              return _AppRow(app: app, fraction: app.total / largest);
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Android reads the size of every app one by one, which takes a while on
+/// the first run; later runs show the last result right away.
+class _Loading extends StatelessWidget {
+  const _Loading();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Asking Android how big each app is...',
+              style: theme.textTheme.titleSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'This takes a moment with many apps. Next time the last '
+              'result shows right away.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -103,6 +107,7 @@ class _Summary extends StatelessWidget {
   const _Summary({
     required this.sizes,
     required this.files,
+    required this.refreshing,
     required this.showSystem,
     required this.onShowSystem,
   });
@@ -111,6 +116,9 @@ class _Summary extends StatelessWidget {
 
   /// Size of the shared storage scan.
   final int files;
+
+  /// Reading the sizes again; these are from last time.
+  final bool refreshing;
   final bool showSystem;
   final ValueChanged<bool> onShowSystem;
 
@@ -135,6 +143,10 @@ class _Summary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (refreshing) ...[
+            const LinearProgressIndicator(),
+            const SizedBox(height: 8),
+          ],
           line('Apps and their data', apps),
           line('Your files (Explore)', files),
           if (system > 0) line('System and other', system),

@@ -70,12 +70,14 @@ class ScanHeader extends StatelessWidget {
                 const SizedBox(width: 4),
               ],
               Expanded(
-                child: canPickFolder && model.drives.isNotEmpty
+                // On phones only once there is a second drive to pick, such
+                // as an SD card.
+                child: model.drives.length > (canPickFolder ? 0 : 1)
                     ? Align(
                         alignment: Alignment.centerLeft,
                         child: _DriveMenu(
                           model: model,
-                          onPickFolder: _pickFolder,
+                          onPickFolder: canPickFolder ? _pickFolder : null,
                         ),
                       )
                     : Text(
@@ -157,10 +159,12 @@ class ScanHeader extends StatelessWidget {
 /// What is scanned, as a dropdown: the drive's name or the folder's path,
 /// with the other drives and a folder picker in the menu.
 class _DriveMenu extends StatelessWidget {
-  const _DriveMenu({required this.model, required this.onPickFolder});
+  const _DriveMenu({required this.model, this.onPickFolder});
 
   final AppModel model;
-  final VoidCallback onPickFolder;
+
+  /// Null where folders can not be picked, as on Android.
+  final VoidCallback? onPickFolder;
 
   @override
   Widget build(BuildContext context) {
@@ -193,12 +197,14 @@ class _DriveMenu extends StatelessWidget {
               ),
             ),
           ),
-        const Divider(height: 8),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.folder_open_outlined, size: 20),
-          onPressed: onPickFolder,
-          child: const Text('Choose folder...'),
-        ),
+        if (onPickFolder != null) ...[
+          const Divider(height: 8),
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.folder_open_outlined, size: 20),
+            onPressed: onPickFolder,
+            child: const Text('Choose folder...'),
+          ),
+        ],
       ],
       builder: (context, controller, _) => InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -239,8 +245,12 @@ class _DriveMenu extends StatelessWidget {
     );
   }
 
-  static IconData _driveIcon(Drive d) =>
-      d.main ? Icons.computer_outlined : Icons.storage_outlined;
+  static IconData _driveIcon(Drive d) => switch ((d.main, AppModel.onAndroid)) {
+    (true, true) => Icons.smartphone_outlined,
+    (true, false) => Icons.computer_outlined,
+    (false, true) => Icons.sd_card_outlined,
+    (false, false) => Icons.storage_outlined,
+  };
 }
 
 /// A small tappable label with an icon, for the status line.

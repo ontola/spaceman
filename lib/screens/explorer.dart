@@ -372,100 +372,109 @@ class _ExplorerScreenState extends State<ExplorerScreen>
       );
     }
     final crumbs = model.breadcrumbs(model.currentId);
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _up,
-        const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true): _up,
-        const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
-        // Explorer's shortcuts on Windows and Linux.
-        const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): _up,
-        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): _up,
-        const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
-            _arrow(AxisDirection.up),
-        const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
-            _arrow(AxisDirection.down),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-            _arrow(AxisDirection.left),
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-            _arrow(AxisDirection.right),
-        const SingleActivator(LogicalKeyboardKey.enter): _openFocused,
-        const SingleActivator(LogicalKeyboardKey.backspace): _toggleRemoval,
-        const SingleActivator(LogicalKeyboardKey.delete): _toggleRemoval,
-        // Space works on what the mouse points at, then the focus.
-        const SingleActivator(LogicalKeyboardKey.space): () =>
-            _toggleRemoval(pointerFirst: true),
-        const SingleActivator(LogicalKeyboardKey.backspace, meta: true):
-            _toggleRemoval,
+    // Android's back button goes up a folder; only at the top it leaves.
+    return PopScope(
+      canPop: _parentId == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _up();
       },
-      child: Focus(
-        autofocus: true,
-        child: Listener(
-          onPointerDown: (e) {
-            if (e.buttons & kBackMouseButton != 0) _up();
-          },
-          onPointerSignal: _onPointerSignal,
-          onPointerPanZoomStart: _onPanZoomStart,
-          onPointerPanZoomUpdate: _onPanZoomUpdate,
-          onPointerPanZoomEnd: _onPanZoomEnd,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _Breadcrumbs(
-                      model: model,
-                      crumbs: crumbs,
-                      onOpen: _go,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: SegmentedButton<bool>(
-                      showSelectedIcon: false,
-                      style: const ButtonStyle(
-                        visualDensity: VisualDensity.compact,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): _up,
+          const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true):
+              _up,
+          const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): _up,
+          // Explorer's shortcuts on Windows and Linux.
+          const SingleActivator(LogicalKeyboardKey.arrowUp, alt: true): _up,
+          const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): _up,
+          const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+              _arrow(AxisDirection.up),
+          const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+              _arrow(AxisDirection.down),
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+              _arrow(AxisDirection.left),
+          const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+              _arrow(AxisDirection.right),
+          const SingleActivator(LogicalKeyboardKey.enter): _openFocused,
+          const SingleActivator(LogicalKeyboardKey.backspace): _toggleRemoval,
+          const SingleActivator(LogicalKeyboardKey.delete): _toggleRemoval,
+          // Space works on what the mouse points at, then the focus.
+          const SingleActivator(LogicalKeyboardKey.space): () =>
+              _toggleRemoval(pointerFirst: true),
+          const SingleActivator(LogicalKeyboardKey.backspace, meta: true):
+              _toggleRemoval,
+        },
+        child: Focus(
+          autofocus: true,
+          child: Listener(
+            onPointerDown: (e) {
+              if (e.buttons & kBackMouseButton != 0) _up();
+            },
+            onPointerSignal: _onPointerSignal,
+            onPointerPanZoomStart: _onPanZoomStart,
+            onPointerPanZoomUpdate: _onPanZoomUpdate,
+            onPointerPanZoomEnd: _onPanZoomEnd,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Breadcrumbs(
+                        model: model,
+                        crumbs: crumbs,
+                        onOpen: _go,
                       ),
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          icon: Icon(Icons.view_list, size: 18),
-                          tooltip: 'List',
-                        ),
-                        ButtonSegment(
-                          value: true,
-                          icon: Icon(Icons.dashboard, size: 18),
-                          tooltip: 'Treemap',
-                        ),
-                      ],
-                      selected: {model.treemap},
-                      onSelectionChanged: (v) => model.setTreemap(v.single),
                     ),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: GestureDetector(
-                  // Touch screens; the trackpad is handled above.
-                  supportedDevices: const {PointerDeviceKind.touch},
-                  onHorizontalDragStart: (_) => _beginSwipe(),
-                  onHorizontalDragUpdate: (d) => _moveSwipe(d.primaryDelta!),
-                  onHorizontalDragEnd: (d) => _endSwipe(d.primaryVelocity ?? 0),
-                  onHorizontalDragCancel: () => _endSwipe(0),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      _width = constraints.maxWidth;
-                      return ClipRect(child: _buildLists(context));
-                    },
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: SegmentedButton<bool>(
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        segments: const [
+                          ButtonSegment(
+                            value: false,
+                            icon: Icon(Icons.view_list, size: 18),
+                            tooltip: 'List',
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            icon: Icon(Icons.dashboard, size: 18),
+                            tooltip: 'Treemap',
+                          ),
+                        ],
+                        selected: {model.treemap},
+                        onSelectionChanged: (v) => model.setTreemap(v.single),
+                      ),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    // Touch screens; the trackpad is handled above.
+                    supportedDevices: const {PointerDeviceKind.touch},
+                    onHorizontalDragStart: (_) => _beginSwipe(),
+                    onHorizontalDragUpdate: (d) => _moveSwipe(d.primaryDelta!),
+                    onHorizontalDragEnd: (d) =>
+                        _endSwipe(d.primaryVelocity ?? 0),
+                    onHorizontalDragCancel: () => _endSwipe(0),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        _width = constraints.maxWidth;
+                        return ClipRect(child: _buildLists(context));
+                      },
+                    ),
                   ),
                 ),
-              ),
-              const Divider(height: 1),
-              FolderBar(
-                model: model,
-                folder: crumbs.isEmpty ? model.rootNode! : crumbs.last,
-              ),
-            ],
+                const Divider(height: 1),
+                FolderBar(
+                  model: model,
+                  folder: crumbs.isEmpty ? model.rootNode! : crumbs.last,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -595,21 +604,25 @@ class _ExplorerScreenState extends State<ExplorerScreen>
     final current = crumbs.isEmpty ? model.rootNode! : crumbs.last;
     // Protected items are out of the way: they live in the Do not touch tab.
     final items = _items(current.id);
-    // At the top of the scan, the space it did not see is a row too, in
-    // its place by size.
-    final unscanned = current.id == Treemap.rootId && model.showsUnscanned
-        ? model.unscanned
-        : 0;
-    final unscannedAt = unscanned == 0
-        ? -1
-        : switch (items.indexWhere((n) => n.size < unscanned)) {
-            -1 => items.length,
-            final i => i,
-          };
-    final largest = math.max(items.isEmpty ? 1 : items.first.size, unscanned);
+    // At the top of the scan, the space it did not see gets rows too, in
+    // their place by size.
+    final parts = current.id == Treemap.rootId
+        ? (model.unscannedParts.where((p) => p.size > 0).toList()
+            ..sort((a, b) => b.size.compareTo(a.size)))
+        : const <UnscannedPart>[];
+    // Items and parts merged by size: a part is a record, an item a node.
+    final rows = <Object>[...items];
+    for (final p in parts) {
+      final at = rows.indexWhere((r) => r is NodeView && r.size < p.size);
+      rows.insert(at == -1 ? rows.length : at, p);
+    }
+    final largest = math.max(
+      items.isEmpty ? 1 : items.first.size,
+      parts.isEmpty ? 0 : parts.first.size,
+    );
     final list = ListView.builder(
       key: PageStorageKey(id),
-      itemCount: items.length + 1 + (unscanned > 0 ? 1 : 0),
+      itemCount: rows.length + 1,
       itemBuilder: (context, i) {
         if (i == 0) {
           return Padding(
@@ -620,11 +633,15 @@ class _ExplorerScreenState extends State<ExplorerScreen>
             ),
           );
         }
-        if (i - 1 == unscannedAt) {
-          return UnscannedRow(model: model, fraction: unscanned / largest);
+        final row = rows[i - 1];
+        if (row is UnscannedPart) {
+          return UnscannedRow(
+            model: model,
+            part: row,
+            fraction: row.size / largest,
+          );
         }
-        final node =
-            items[i - 1 - (unscannedAt >= 0 && i - 1 > unscannedAt ? 1 : 0)];
+        final node = row as NodeView;
         final focused = id == model.currentId && node.path == _focusPath;
         return MouseRegion(
           onEnter: (_) => _hovered = node,

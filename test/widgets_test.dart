@@ -322,6 +322,22 @@ void main() {
       expect(model.currentId, 0);
     });
 
+    testWidgets('back goes up a folder, then to Explore', (tester) async {
+      await start(tester, list: true);
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      // Android's back button; true means the app handled it and stays.
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+      expect(model.currentId, 0);
+
+      model.showTab(2);
+      await tester.pumpAndSettle();
+      expect(await tester.binding.handlePopRoute(), isTrue);
+      await tester.pumpAndSettle();
+      expect(model.tab, 0);
+    });
+
     testWidgets('pulling the list past its top goes up', (tester) async {
       await start(tester, list: true);
       await tester.tap(find.text('Movies'));
@@ -430,6 +446,66 @@ void main() {
         tester.getTopLeft(find.byType(UnscannedRow)).dy,
         lessThan(tester.getTopLeft(rowOf('Movies')).dy),
       );
+    });
+
+    testWidgets('on Android shows apps instead, then links to them', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      var usage = false;
+      const channel = MethodChannel('spaceman/storage');
+      final calls = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        calls.add(call.method);
+        return switch (call.method) {
+          'hasUsageAccess' => usage,
+          'appSizes' => {
+            'total': 50000000000,
+            'free': 30000000000,
+            'apps': [
+              {
+                'package': 'com.big',
+                'label': 'Big app',
+                'app': 2000000000,
+                'data': 13000000000,
+                'cache': 0,
+                'system': false,
+              },
+            ],
+          },
+          _ => null,
+        };
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+      core.disk = const DiskSpace(total: 50000000000, free: 30000000000);
+      await start(tester);
+      // Without usage access: one Apps block that asks for it.
+      expect(find.byType(UnscannedTile), findsOneWidget);
+      expect(find.text('Not scanned'), findsNothing);
+      expect(find.text('Apps'), findsWidgets);
+      await tester.tap(find.text('Allow usage access'));
+      expect(calls.last, 'requestUsageAccess');
+
+      // With it: the apps at their real size, the rest as System.
+      usage = true;
+      await tester.runAsync(model.loadApps);
+      await tester.pumpAndSettle();
+      expect(find.byType(UnscannedTile), findsNWidgets(2));
+      expect(find.text('System and other'), findsOneWidget);
+      expect(find.text('15.0 GB'), findsOneWidget);
+      await tester.tap(find.text('See apps'));
+      await tester.pumpAndSettle();
+      expect(model.tab, AppModel.appsTab);
+      expect(find.text('Big app'), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('no tile for a folder smaller than home', (tester) async {
