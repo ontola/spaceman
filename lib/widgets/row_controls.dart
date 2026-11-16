@@ -2,7 +2,7 @@
 /// the file manager, do not touch, and the checkbox.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../app_model.dart';
 import '../platform.dart';

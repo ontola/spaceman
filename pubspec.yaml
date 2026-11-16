@@ -38,6 +38,7 @@ dependencies:
   flutter_rust_bridge: 2.13.0
   path_provider: ^2.1.6
   file_selector: ^1.1.0
+  material_ui: ^1.11.1
 
 dev_dependencies:
   flutter_test:
