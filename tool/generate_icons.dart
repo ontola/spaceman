@@ -153,6 +153,13 @@ void main() {
     await File('windows/runner/resources/app_icon.ico').writeAsBytes(_ico(ico));
     stdout.writeln('windows/runner/resources/app_icon.ico');
 
+    // Linux: the desktop entry's icon, also used for the window and the
+    // AppImage.
+    await _write(
+      'linux/packaging/io.ontola.spaceman.png',
+      _render(256, LogoBackground.circle),
+    );
+
     // A large copy for the README.
     await _write('assets/logo.png', _render(512, LogoBackground.circle));
   });

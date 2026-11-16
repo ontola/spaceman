@@ -1,0 +1,42 @@
+name: Website
+
+# Publishes website/ to GitHub Pages (https://ontola.github.io/spaceman/).
+# The logo and screenshots are copied from the app's own assets so the site
+# and the README stay in sync.
+on:
+  push:
+    branches: [main]
+    paths:
+      - website/**
+      - assets/logo.png
+      - docs/screenshots/**
+      - .github/workflows/website.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site
+        run: |
+          mkdir -p _site/screenshots
+          cp -r website/. _site/
+          cp assets/logo.png _site/
+          cp docs/screenshots/*.png _site/screenshots/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+      - id: deployment
+        uses: actions/deploy-pages@v4

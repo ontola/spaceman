@@ -6,8 +6,9 @@ Free up disk space, fast. SpaceMan shows where your space goes, suggests what
 can safely be removed and lets you mark things as "do not touch".
 
 A Flutter app on top of a Rust core, connected with
-[flutter_rust_bridge](https://cjycode.com/flutter_rust_bridge/). macOS comes
-first; Windows, Linux, iOS and Android share the same code.
+[flutter_rust_bridge](https://cjycode.com/flutter_rust_bridge/). Runs on macOS,
+Windows, Linux and Android from the same code. Website:
+[ontola.github.io/spaceman](https://ontola.github.io/spaceman/).
 
 <p>
   <img src="docs/screenshots/desktop-treemap.png" width="640" alt="SpaceMan on macOS: treemap of a folder">
@@ -20,6 +21,7 @@ first; Windows, Linux, iOS and Android share the same code.
 <p>
   <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-macOS.dmg"><img src="https://img.shields.io/badge/Download-macOS-1f6feb?style=for-the-badge&logo=apple" alt="Download for macOS"></a>
   <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Windows-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows-1f6feb?style=for-the-badge&logo=windows" alt="Download for Windows"></a>
+  <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Linux-x86_64.AppImage"><img src="https://img.shields.io/badge/Download-Linux-1f6feb?style=for-the-badge&logo=linux" alt="Download for Linux"></a>
   <a href="https://github.com/ontola/spaceman/releases/latest/download/SpaceMan-Android.apk"><img src="https://img.shields.io/badge/Download-Android-1f6feb?style=for-the-badge&logo=android" alt="Download for Android"></a>
 </p>
 
@@ -28,6 +30,8 @@ first; Windows, Linux, iOS and Android share the same code.
 - **Windows**: the setup is not signed yet. Run it, and if SmartScreen warns,
   choose *More info*, *Run anyway*. It installs for your user only (no admin needed), adds a
   Start menu entry and can be removed under *Settings > Apps*.
+- **Linux** (x86_64): `chmod +x SpaceMan-Linux-x86_64.AppImage` and run it.
+  There is also a `.tar.gz` with the plain build on the releases page.
 - **Android**: open the APK on your phone and allow installing from this
   source.
 
@@ -167,6 +171,22 @@ certificate with its key), `MACOS_CERT_PASSWORD`, `APPLE_ID`,
 `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD` (an app-specific password); without
 them it is built unsigned. The Windows setup is not signed.
 
+### Linux notes
+
+Needs `libgtk-3-dev` and `ninja-build` (`sudo apt install libgtk-3-dev ninja-build`).
+`flutter build linux --release` builds `build/linux/x64/release/bundle`;
+`linux/packaging/package.sh [path to appimagetool]` turns that into
+`SpaceMan-Linux-x86_64.tar.gz` and, given
+[appimagetool](https://github.com/AppImage/appimagetool), an AppImage. CI
+builds on Ubuntu 22.04 so the AppImage runs on older distributions too.
+Removed items go to the freedesktop Trash.
+
+### Website
+
+`website/index.html` is published to GitHub Pages by
+`.github/workflows/website.yml` on every push to `main` that touches it. The
+logo and screenshots are copied in from `assets/` and `docs/screenshots/`.
+
 ### Android notes
 
 SpaceMan scans shared storage (`/storage/emulated/0`) and needs *All files
@@ -203,3 +223,7 @@ which the download buttons above then point at.
 - Duplicate file finder
 - Treemap / sunburst view
 - Docker, Homebrew and simulator cleanup through their own CLIs
+
+## License
+
+[MIT](LICENSE)

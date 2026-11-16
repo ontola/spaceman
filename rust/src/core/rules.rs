@@ -130,6 +130,9 @@ const HOME_RULES: &[HomeRule] = &[
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 const HOME_RULES: &[HomeRule] = &[
     HomeRule { rel: ".local/share/Trash/files", removal: EmptyTrash, title: "Trash", reason: "Files in the Trash still take up space until it is emptied.", category: Trash, safety: Review },
+    HomeRule { rel: ".local/share/Steam/steamapps/shadercache", removal: Contents, title: "Steam shader cache", reason: "Compiled graphics shaders, rebuilt by games when needed.", category: Cache, safety: Safe },
+    HomeRule { rel: ".local/share/containers/storage", removal: Whole, title: "Podman data", reason: "Container images and volumes. Prefer `podman system prune` to clean up.", category: Cache, safety: Review },
+    HomeRule { rel: ".local/share/flatpak/repo", removal: Whole, title: "Flatpak repository", reason: "Per-user Flatpak downloads. Prefer `flatpak uninstall --unused` to clean up.", category: Cache, safety: Review },
 ];
 
 /// Cross-platform developer and package manager caches.
