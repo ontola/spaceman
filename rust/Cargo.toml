@@ -2,6 +2,7 @@
 name = "rust_lib_spaceman"
 version = "0.2.0"
 edition = "2021"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]

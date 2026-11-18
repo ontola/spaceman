@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spaceman/palette.dart';
 import 'package:spaceman/widgets/logo.dart';
@@ -152,6 +152,13 @@ void main() {
     ];
     await File('windows/runner/resources/app_icon.ico').writeAsBytes(_ico(ico));
     stdout.writeln('windows/runner/resources/app_icon.ico');
+
+    // Linux: the desktop entry's icon, also used for the window and the
+    // AppImage.
+    await _write(
+      'linux/packaging/io.ontola.spaceman.png',
+      _render(256, LogoBackground.circle),
+    );
 
     // A large copy for the README.
     await _write('assets/logo.png', _render(512, LogoBackground.circle));

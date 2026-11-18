@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SpaceMan
+GenericName=Disk Space Analyzer
+Comment=See where your disk space goes and free it up
+Exec=spaceman
+Icon=io.ontola.spaceman
+Terminal=false
+Categories=System;Filesystem;
+Keywords=disk;space;usage;storage;cleanup;treemap;
+StartupWMClass=io.ontola.spaceman

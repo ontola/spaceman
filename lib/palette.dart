@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The colours SpaceMan is built from. The treemap, the app theme, the logo
 /// and the generated app icons all read from here, so changing a value

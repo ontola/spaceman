@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:spaceman/src/rust/frb_generated.dart';
 
 import 'app_model.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The "Do not touch" navigation icon, where protected rows fly to.
 final doNotTouchTarget = GlobalKey(debugLabel: 'doNotTouchTarget');
